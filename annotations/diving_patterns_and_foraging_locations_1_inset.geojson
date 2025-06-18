@@ -1,0 +1,8 @@
+{
+"type": "FeatureCollection",
+"name": "diving_patterns_and_foraging_locations_1",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "id": null }, "geometry": { "type": "MultiPolygon", "coordinates": [ [ [ [ -170.435934671297389, 57.096215037471019 ], [ -170.435934671297389, 57.262224373083164 ], [ -170.077675738964956, 57.262224373083164 ], [ -170.077675738964956, 57.096215037471019 ], [ -170.435934671297389, 57.096215037471019 ] ] ] ] } }
+]
+}
