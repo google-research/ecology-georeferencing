@@ -449,17 +449,269 @@ class PDFProcessor:
                 'page_after': ''
             }
 
-    def process_pdf(self, pdf_path: str) -> Dict[str, Any]:
+    def normalize_title_case(self, title: str, pdf_path: str) -> str:
         """
-        Process a single PDF: extract images and text context.
+        Convert all-caps titles to proper case using paper text as context.
+
+        RATIONALE FOR THIS FUNCTION:
+        Many ecology papers have titles in ALL CAPS, which looks poor in visualizations.
+        Simply applying standard title case would incorrectly lowercase proper nouns like
+        place names ("yellowstone" instead of "Yellowstone"), species names, etc.
+
+        APPROACH:
+        We use a hybrid strategy that combines:
+        1. Detection of all-caps titles (>70% uppercase letters)
+        2. Scanning the paper's abstract/first page to identify words that appear
+           capitalized in mid-sentence positions (likely proper nouns)
+        3. Applying title case rules while preserving these proper nouns
+        4. Keeping obvious abbreviations (short all-caps words) as-is
+
+        This handles most cases reasonably well without requiring external NLP libraries
+        or geographic databases. The paper's own text serves as a capitalization dictionary.
+
+        LIMITATIONS:
+        - May miss proper nouns that only appear in the title
+        - Section headers can pollute the capitalization data
+        - Multi-word place names are handled word-by-word
+        - Won't be perfect, but much better than all-caps or naive title case
+
+        Args:
+            title: The title to normalize
+            pdf_path: Path to PDF (for extracting text context)
+
+        Returns:
+            Normalized title with proper capitalization
+        """
+        import re
+
+        # Check if title is mostly uppercase (>70% of letters are caps)
+        letters = [c for c in title if c.isalpha()]
+        if not letters:
+            return title
+
+        caps_ratio = sum(1 for c in letters if c.isupper()) / len(letters)
+        if caps_ratio < 0.7:
+            # Title is not all-caps, leave it as-is
+            return title
+
+        try:
+            # Extract first page text to identify proper nouns
+            doc = fitz.open(pdf_path)
+            if len(doc) == 0:
+                doc.close()
+                return title.title()  # Fallback to simple title case
+
+            first_page_text = doc[0].get_text()
+            doc.close()
+
+            # Split into sentences (simple approach)
+            sentences = re.split(r'[.!?]+', first_page_text)
+
+            # Track capitalization frequency for each word (case-insensitive key)
+            word_caps_count = {}  # word_lower -> {'caps': count, 'total': count}
+
+            for sentence in sentences:
+                words = sentence.split()
+
+                for i, word in enumerate(words):
+                    # Skip first word of sentence (always capitalized)
+                    if i == 0:
+                        continue
+
+                    # Clean word (remove punctuation)
+                    clean_word = re.sub(r'[^\w]', '', word)
+                    if len(clean_word) < 2:
+                        continue
+
+                    word_lower = clean_word.lower()
+
+                    if word_lower not in word_caps_count:
+                        word_caps_count[word_lower] = {'caps': 0, 'total': 0}
+
+                    word_caps_count[word_lower]['total'] += 1
+
+                    # Check if word starts with capital
+                    if clean_word[0].isupper():
+                        word_caps_count[word_lower]['caps'] += 1
+
+            # Build set of words that are proper nouns (capitalized >50% of time, min 2 occurrences)
+            proper_nouns = set()
+            for word_lower, counts in word_caps_count.items():
+                if counts['total'] >= 2 and counts['caps'] / counts['total'] > 0.5:
+                    proper_nouns.add(word_lower)
+
+            # Now apply title case with proper noun preservation
+            title_lower = title.lower()
+            words = title_lower.split()
+            result_words = []
+
+            # Words to keep lowercase in title case (articles, conjunctions, short prepositions)
+            lowercase_words = {'a', 'an', 'the', 'and', 'but', 'or', 'for', 'nor', 'on',
+                             'at', 'to', 'by', 'in', 'of', 'up'}
+
+            for i, word in enumerate(words):
+                # Remove punctuation for analysis
+                clean_word = re.sub(r'[^\w]', '', word)
+                word_lower = clean_word.lower()
+
+                # Preserve original non-letter characters
+                prefix = ''
+                suffix = ''
+                for c in word:
+                    if not c.isalnum():
+                        prefix += c
+                    else:
+                        break
+                for c in reversed(word):
+                    if not c.isalnum():
+                        suffix = c + suffix
+                    else:
+                        break
+
+                # Decision logic for capitalization
+                if i == 0:
+                    # Always capitalize first word
+                    result_word = clean_word.capitalize()
+                elif word_lower in proper_nouns:
+                    # Known proper noun from paper text
+                    result_word = clean_word.capitalize()
+                elif len(clean_word) <= 4 and clean_word.isupper():
+                    # Likely abbreviation (GPS, GIS, USA, etc.)
+                    result_word = clean_word.upper()
+                elif word_lower in lowercase_words and i > 0:
+                    # Function word (keep lowercase unless first word)
+                    result_word = word_lower
+                elif len(clean_word) > 3:
+                    # Major word, capitalize
+                    result_word = clean_word.capitalize()
+                else:
+                    # Short word, capitalize (conservative)
+                    result_word = clean_word.capitalize()
+
+                result_words.append(prefix + result_word + suffix)
+
+            return ' '.join(result_words)
+
+        except Exception as e:
+            # If anything goes wrong, fall back to simple title case
+            print(f"  Warning: Error normalizing title case: {e}")
+            return title.title()
+
+    def extract_title(self, pdf_path: str) -> Dict[str, Any]:
+        """
+        Extract title from PDF using metadata and text heuristics.
 
         Args:
             pdf_path: Path to PDF file
 
         Returns:
-            Dict with PDF info, images, and text content
+            Dict with 'title' (str), 'title_source' (str), and 'title_extraction_success' (bool)
+        """
+        try:
+            doc = fitz.open(pdf_path)
+
+            # Try metadata first
+            if doc.metadata and doc.metadata.get('title'):
+                title = doc.metadata['title'].strip()
+                if title and len(title) > 5:  # Sanity check
+                    doc.close()
+                    # Normalize title case if needed
+                    title = self.normalize_title_case(title, pdf_path)
+                    return {
+                        'title': title,
+                        'title_source': 'metadata',
+                        'title_extraction_success': True
+                    }
+
+            # Fall back to text analysis of first page
+            if len(doc) > 0:
+                page = doc[0]
+
+                # Get text with font information
+                blocks = page.get_text("dict")["blocks"]
+
+                # Find text blocks with font size info
+                candidates = []
+                for block in blocks:
+                    if block.get("type") == 0:  # Text block
+                        for line in block.get("lines", []):
+                            for span in line.get("spans", []):
+                                text = span.get("text", "").strip()
+                                size = span.get("size", 0)
+                                bbox = span.get("bbox", [0, 0, 0, 0])
+
+                                # Only consider text in upper 40% of page with reasonable size
+                                if text and size > 10 and bbox[1] < page.rect.height * 0.4:
+                                    candidates.append({
+                                        'text': text,
+                                        'size': size,
+                                        'y': bbox[1]
+                                    })
+
+                if candidates:
+                    # Sort by size (descending) then by y position (ascending)
+                    candidates.sort(key=lambda x: (-x['size'], x['y']))
+
+                    # Take largest text block in upper portion
+                    # Combine multiple spans if they're all large
+                    max_size = candidates[0]['size']
+                    title_parts = []
+
+                    for c in candidates:
+                        # Include spans that are nearly as large (within 2 points)
+                        if c['size'] >= max_size - 2 and len(title_parts) < 5:
+                            title_parts.append(c['text'])
+                        else:
+                            break
+
+                    title = ' '.join(title_parts).strip()
+
+                    # Clean up title
+                    title = ' '.join(title.split())  # Normalize whitespace
+                    if len(title) > 200:
+                        title = title[:200] + '...'
+
+                    if len(title) > 10:
+                        doc.close()
+                        # Normalize title case if needed
+                        title = self.normalize_title_case(title, pdf_path)
+                        return {
+                            'title': title,
+                            'title_source': 'heuristic',
+                            'title_extraction_success': True
+                        }
+
+            doc.close()
+
+            # Extraction failed
+            return {
+                'title': os.path.basename(pdf_path),
+                'title_source': 'filename',
+                'title_extraction_success': False
+            }
+
+        except Exception as e:
+            print(f"  Warning: Failed to extract title: {e}")
+            return {
+                'title': os.path.basename(pdf_path),
+                'title_source': 'filename',
+                'title_extraction_success': False
+            }
+
+    def process_pdf(self, pdf_path: str) -> Dict[str, Any]:
+        """
+        Process a single PDF: extract images, text context, and title.
+
+        Args:
+            pdf_path: Path to PDF file
+
+        Returns:
+            Dict with PDF info, images, text content, and title
         """
         print(f"  Processing: {os.path.basename(pdf_path)}")
+
+        # Extract title
+        title_info = self.extract_title(pdf_path)
 
         # Extract images
         images = self.extract_images_from_pdf(pdf_path)
@@ -472,6 +724,9 @@ class PDFProcessor:
         return {
             'pdf_path': pdf_path,
             'pdf_filename': os.path.basename(pdf_path),
+            'title': title_info['title'],
+            'title_source': title_info['title_source'],
+            'title_extraction_success': title_info['title_extraction_success'],
             'num_images': len(images),
             'images': images
         }
@@ -1441,6 +1696,9 @@ Examples:
             pdf_output = {
                 'pdf_path': pdf_path,
                 'pdf_filename': pdf_result['pdf_filename'],
+                'title': pdf_result.get('title', pdf_result['pdf_filename']),
+                'title_source': pdf_result.get('title_source', 'filename'),
+                'title_extraction_success': pdf_result.get('title_extraction_success', False),
                 'num_images_extracted': pdf_result['num_images'],
                 'images': []
             }

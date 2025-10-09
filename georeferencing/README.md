@@ -1,6 +1,6 @@
 # Georeferencing Tools
 
-Automated georeferencing of maps in ecology research papers using multimodal LLMs.
+This folder contains a demonstration implementation of map georeferencing in ecology research papers using multimodal LLMs.
 
 ## Table of Contents
 
@@ -27,6 +27,7 @@ Automated georeferencing of maps in ecology research papers using multimodal LLM
   - [Command-line options](#command-line-options-1)
   - [Features](#features)
   - [Output structure](#output-structure)
+- [Future work](#future-work)
 - [Contributing](#contributing)
 
 ## Overview
@@ -34,9 +35,10 @@ Automated georeferencing of maps in ecology research papers using multimodal LLM
 This package provides tools to:
 
 1. Extract images from PDF files of ecology papers
-2. Identify which images are maps using a "small" LLM (Gemini 2.5 Flash)
-3. Georeference those maps using a "large" LLM (Gemini 2.5 Pro)
+2. Identify which images are maps using a "small" LLM (Gemini 2.5 Flash by default)
+3. Georeference those maps using a "large" LLM (Gemini 2.5 Pro by default), using the images themselves, as well as surrounding text context from the PDF file
 4. Output structured results with geographic coordinates
+5. Visualize those results on a map
 
 ## Installation
 
@@ -138,13 +140,14 @@ python -m georeferencing.georeference_files --resume georeferencing_20250109_120
 The script performs these steps:
 
 1. **PDF Enumeration** - Finds all PDF files in the input folder
-2. **Image Extraction** - Extracts images from each PDF
+2. **Image and Title Extraction** - Extracts images and title from each PDF
+   - Uses heuristics to extract paper titles from PDF metadata or the first page of the PDF
    - Deduplicates images using MD5 hashes
    - Filters out images smaller than 100px on either dimension
    - Extracts text from first page, image page, and adjacent pages
 3. **Cost Estimation** - Estimates API costs and asks for confirmation
 4. **Map Identification** - Uses small model to classify which images are maps
-5. **Georeferencing** - Uses large model to georeference maps with text context
+5. **Georeferencing** - Uses large model to georeference maps with text context (currently the first page of the PDF file, the page on which the map occurs, and the pages before and after the map)
 6. **Results Generation** - Outputs structured JSON with all results
 
 ### Output format
@@ -415,6 +418,12 @@ All images are referenced by relative path, so the entire folder can be:
 - Opened directly from filesystem
 
 Images are automatically resized to `--max-image-size` (default 800px) to reduce file size while maintaining quality for visualization purposes.
+
+## Future work
+
+* Parallelize PDF processing and LLM submission
+* Support local LLMs via Ollama
+* Add validation against ground truth, when run on the benchmark dataset
 
 ## Contributing
 

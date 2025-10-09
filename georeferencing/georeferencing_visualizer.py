@@ -129,6 +129,8 @@ def generate_html(results_data: Dict[str, Any], image_mapping: Dict[str, str]) -
     for pdf_result in results_data['results']:
         pdf_path = pdf_result['pdf_path']
         pdf_filename = pdf_result['pdf_filename']
+        pdf_title = pdf_result.get('title', pdf_filename)
+        title_extraction_success = pdf_result.get('title_extraction_success', False)
 
         for img in pdf_result['images']:
             # Check if this was identified as a map
@@ -155,6 +157,8 @@ def generate_html(results_data: Dict[str, Any], image_mapping: Dict[str, str]) -
                     figure_data = {
                         'pdf_filename': pdf_filename,
                         'pdf_path': pdf_path,
+                        'pdf_title': pdf_title,
+                        'title_extraction_success': title_extraction_success,
                         'image_filename': img['image_filename'],
                         'image_path': relative_image_path,
                         'page': img['page'],
@@ -167,6 +171,7 @@ def generate_html(results_data: Dict[str, Any], image_mapping: Dict[str, str]) -
                     # Failed georeferencing (confidence 0 or missing coords)
                     failed_figures.append({
                         'pdf_filename': pdf_filename,
+                        'pdf_title': pdf_title,
                         'image_filename': img['image_filename'],
                         'page': img['page']
                     })
@@ -174,6 +179,7 @@ def generate_html(results_data: Dict[str, Any], image_mapping: Dict[str, str]) -
                 # Map identification succeeded but georeferencing failed
                 failed_figures.append({
                     'pdf_filename': pdf_filename,
+                    'pdf_title': pdf_title,
                     'image_filename': img['image_filename'],
                     'page': img['page']
                 })
@@ -300,7 +306,15 @@ def generate_html(results_data: Dict[str, Any], image_mapping: Dict[str, str]) -
             font-weight: 600;
             font-size: 14px;
             margin-bottom: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }}
+
+        .figure-item.active .figure-title {{
+            white-space: normal;
             word-wrap: break-word;
+            overflow: visible;
         }}
 
         .figure-subtitle {{
@@ -517,7 +531,7 @@ def generate_html(results_data: Dict[str, Any], image_mapping: Dict[str, str]) -
                 const li = document.createElement('li');
                 li.className = 'figure-item';
                 li.innerHTML = `
-                    <div class="figure-title">${{figure.pdf_filename}}</div>
+                    <div class="figure-title">${{figure.pdf_title}}</div>
                     <div class="figure-subtitle">Page ${{figure.page + 1}} • Confidence: ${{(figure.confidence * 100).toFixed(0)}}%</div>
                 `;
                 li.onclick = () => selectFigure(index);
@@ -541,7 +555,7 @@ def generate_html(results_data: Dict[str, Any], image_mapping: Dict[str, str]) -
                 const li = document.createElement('li');
                 li.className = 'figure-item failed';
                 li.innerHTML = `
-                    <div class="figure-title">${{figure.pdf_filename}}</div>
+                    <div class="figure-title">${{figure.pdf_title}}</div>
                     <div class="figure-subtitle">Page ${{figure.page + 1}} • Failed</div>
                 `;
                 listElement.appendChild(li);
@@ -555,7 +569,7 @@ def generate_html(results_data: Dict[str, Any], image_mapping: Dict[str, str]) -
             const figure = figuresData[index];
             const sidebar = document.getElementById('right-sidebar');
 
-            document.getElementById('detail-paper-title').textContent = figure.pdf_filename;
+            document.getElementById('detail-paper-title').textContent = figure.pdf_title;
             document.getElementById('detail-pdf-link').href = figure.pdf_path;
             document.getElementById('detail-image').src = figure.image_path;
             document.getElementById('detail-page').textContent = `Page ${{figure.page + 1}} • ${{figure.image_filename}}`;
