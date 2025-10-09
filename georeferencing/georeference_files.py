@@ -1,4 +1,5 @@
 """
+
 Georeference ecology papers using LLMs.
 
 This script processes PDF files of ecology papers, extracts images, identifies which
@@ -11,7 +12,10 @@ Workflow:
 4. Output results to JSON file
 
 Supports both batch and synchronous API modes.
+
 """
+
+#%% Imports and constants
 
 import argparse
 import base64
@@ -22,6 +26,8 @@ import os
 import sys
 import tempfile
 import time
+import re
+
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
@@ -32,10 +38,10 @@ from google import genai as batch_genai
 from PIL import Image
 
 
-# =============================================================================
-# COST ESTIMATION CONSTANTS
-# =============================================================================
-# Based on Gemini API pricing (January 2025)
+## Cost estimation constants ##
+#
+# Based on Gemini API pricing from:
+#
 # https://ai.google.dev/gemini-api/docs/pricing
 
 # Token estimation assumptions:
@@ -51,22 +57,20 @@ GEOREF_PROMPT_TOKENS = 1000
 GEOREF_RESPONSE_TOKENS = 200
 IMAGE_TOKENS_PER_TILE = 258  # For 768x768 tiles
 
-# Batch API pricing (50% discount)
-GEMINI_25_FLASH_BATCH_INPUT_COST = 0.15 / 1_000_000  # per token
-GEMINI_25_FLASH_BATCH_OUTPUT_COST = 1.25 / 1_000_000  # per token
-GEMINI_25_PRO_BATCH_INPUT_COST = 0.625 / 1_000_000  # per token
-GEMINI_25_PRO_BATCH_OUTPUT_COST = 5.00 / 1_000_000  # per token
-
 # Synchronous API pricing (standard)
 GEMINI_25_FLASH_SYNC_INPUT_COST = 0.30 / 1_000_000  # per token
 GEMINI_25_FLASH_SYNC_OUTPUT_COST = 2.50 / 1_000_000  # per token
 GEMINI_25_PRO_SYNC_INPUT_COST = 1.25 / 1_000_000  # per token
 GEMINI_25_PRO_SYNC_OUTPUT_COST = 10.00 / 1_000_000  # per token
 
+# Batch API pricing (50% discount)
+GEMINI_25_FLASH_BATCH_INPUT_COST = 0.15 / 1_000_000  # per token
+GEMINI_25_FLASH_BATCH_OUTPUT_COST = 1.25 / 1_000_000  # per token
+GEMINI_25_PRO_BATCH_INPUT_COST = 0.625 / 1_000_000  # per token
+GEMINI_25_PRO_BATCH_OUTPUT_COST = 5.00 / 1_000_000  # per token
 
-# =============================================================================
-# UTILITY FUNCTIONS
-# =============================================================================
+
+#%% Utility functions
 
 def sanitize_filename(path: str) -> str:
     """
@@ -78,6 +82,7 @@ def sanitize_filename(path: str) -> str:
     Returns:
         Sanitized string safe for use in filenames
     """
+
     # Remove file extension
     path_without_ext = os.path.splitext(path)[0]
     # Replace problematic characters with underscores
@@ -89,13 +94,19 @@ def sanitize_filename(path: str) -> str:
 
 
 def sanitize_model_name(model_name: str) -> str:
-    """Sanitize model name for use in filenames."""
+    """
+    Sanitize model name for use in filenames.
+    """
+
     name = model_name.replace('models/', '')
     return name.replace(':', '-').replace('/', '-')
 
 
 def load_api_key() -> str:
-    """Load API key from GEMINI_API_KEY.txt file."""
+    """
+    Load API key from GEMINI_API_KEY.txt file.
+    """
+
     try:
         with open("GEMINI_API_KEY.txt", "r") as f:
             api_key = f.read().strip()
@@ -109,7 +120,10 @@ def load_api_key() -> str:
 
 
 def load_prompts() -> Dict[str, str]:
-    """Load prompts from prompts.json file."""
+    """
+    Load prompts from prompts.json file.
+    """
+
     prompts_path = Path(__file__).parent / "prompts.json"
     try:
         with open(prompts_path, 'r') as f:
@@ -130,6 +144,7 @@ def calculate_image_tokens(width: int, height: int, tile_size: int = 768) -> int
     Returns:
         Number of tokens
     """
+
     tiles_x = (width + tile_size - 1) // tile_size
     tiles_y = (height + tile_size - 1) // tile_size
     total_tiles = tiles_x * tiles_y
@@ -158,6 +173,7 @@ def estimate_cost(
     Returns:
         Dict with cost breakdown, or None if models not supported
     """
+
     # Only support cost estimation for Gemini 2.5 Flash and Pro
     small_model_lower = small_model.lower()
     large_model_lower = large_model.lower()
@@ -220,12 +236,12 @@ def estimate_cost(
     }
 
 
-# =============================================================================
-# IMAGE PROCESSING
-# =============================================================================
+#%% Image processing
 
 class ImageProcessor:
-    """Handles image loading, resizing, and encoding."""
+    """
+    Handles image loading, resizing, and encoding.
+    """
 
     @staticmethod
     def resize_image_to_bytes(image_path: str, max_size: int = 768) -> bytes:
@@ -239,8 +255,11 @@ class ImageProcessor:
         Returns:
             JPEG image as bytes
         """
+
         try:
+
             with Image.open(image_path) as img:
+
                 # Convert to RGB if necessary
                 if img.mode != 'RGB':
                     img = img.convert('RGB')
@@ -261,25 +280,39 @@ class ImageProcessor:
                 resized_img.save(img_byte_arr, format='JPEG', quality=85, optimize=True)
                 return img_byte_arr.getvalue()
 
+            # ...with Image.open(...)
+
         except Exception as e:
+
             raise Exception(f"Failed to process image {image_path}: {str(e)}")
+
+        # ...try/except
+
+    # ...def resize_image_to_bytes(...)
 
     @staticmethod
     def get_image_dimensions(image_path: str) -> Tuple[int, int]:
-        """Get image dimensions without loading full image."""
+
+        """
+        Get image dimensions without loading full image.
+        """
         try:
             with Image.open(image_path) as img:
                 return img.size
         except Exception as e:
             raise Exception(f"Failed to get dimensions for {image_path}: {str(e)}")
 
+    # ...def get_image_dimensions(...)
 
-# =============================================================================
-# PDF PROCESSING
-# =============================================================================
+# ...class ImageProcessor
+
+
+#%% PDF Processing
 
 class PDFProcessor:
-    """Handles PDF text and image extraction."""
+    """
+    Handles PDF text and image extraction.
+    """
 
     def __init__(self, temp_folder: str, min_image_size: int = 100):
         """
@@ -289,13 +322,17 @@ class PDFProcessor:
             temp_folder: Folder for temporary image storage
             min_image_size: Minimum size (in pixels) for image extraction
         """
+
         self.temp_folder = Path(temp_folder)
         self.temp_folder.mkdir(parents=True, exist_ok=True)
         self.min_image_size = min_image_size
         self.image_hashes = set()  # For deduplication
 
     def compute_image_hash(self, image_bytes: bytes) -> str:
-        """Compute hash of image bytes for deduplication."""
+        """
+        Compute hash of image bytes for deduplication.
+        """
+
         return hashlib.md5(image_bytes).hexdigest()
 
     def extract_images_from_pdf(self, pdf_path: str) -> List[Dict[str, Any]]:
@@ -308,6 +345,7 @@ class PDFProcessor:
         Returns:
             List of dicts with image info (path, page, hash, dimensions)
         """
+
         images = []
         sanitized_base = sanitize_filename(pdf_path)
 
@@ -315,10 +353,12 @@ class PDFProcessor:
             doc = fitz.open(pdf_path)
 
             for page_num in range(len(doc)):
+
                 page = doc[page_num]
                 image_list = page.get_images(full=True)
 
                 for img_index, img in enumerate(image_list):
+
                     xref = img[0]
 
                     try:
@@ -360,11 +400,22 @@ class PDFProcessor:
                         print(f"  Warning: Failed to extract image {img_index} from page {page_num}: {e}")
                         continue
 
+                    # ...try/except
+
+                # ...for each image on this page
+
+            # ...for each page in this document
+
             doc.close()
             return images
 
         except Exception as e:
+
             raise Exception(f"Failed to process PDF {pdf_path}: {str(e)}")
+
+        # ...try/except
+
+    # ...def extract_images_from_pdf(...)
 
     def extract_text_from_page(self, pdf_path: str, page_num: int) -> str:
         """
@@ -377,6 +428,7 @@ class PDFProcessor:
         Returns:
             Extracted text
         """
+
         try:
             doc = fitz.open(pdf_path)
             if 0 <= page_num < len(doc):
@@ -402,6 +454,7 @@ class PDFProcessor:
         Returns:
             Dict with text fields: first_page, page_before, image_page, page_after
         """
+
         try:
             doc = fitz.open(pdf_path)
             total_pages = len(doc)
@@ -449,27 +502,33 @@ class PDFProcessor:
                 'page_after': ''
             }
 
+    # ...def extract_text_context(...)
+
     def normalize_title_case(self, title: str, pdf_path: str) -> str:
         """
         Convert all-caps titles to proper case using paper text as context.
 
-        RATIONALE FOR THIS FUNCTION:
+        Rationale for this function:
+
         Many ecology papers have titles in ALL CAPS, which looks poor in visualizations.
         Simply applying standard title case would incorrectly lowercase proper nouns like
         place names ("yellowstone" instead of "Yellowstone"), species names, etc.
 
-        APPROACH:
+        Approach:
+
         We use a hybrid strategy that combines:
-        1. Detection of all-caps titles (>70% uppercase letters)
-        2. Scanning the paper's abstract/first page to identify words that appear
-           capitalized in mid-sentence positions (likely proper nouns)
-        3. Applying title case rules while preserving these proper nouns
-        4. Keeping obvious abbreviations (short all-caps words) as-is
+
+          1. Detection of all-caps titles (>70% uppercase letters)
+          2. Scanning the paper's abstract/first page to identify words that appear
+             capitalized in mid-sentence positions (likely proper nouns)
+          3. Applying title case rules while preserving these proper nouns
+          4. Keeping obvious abbreviations (short all-caps words) as-is
 
         This handles most cases reasonably well without requiring external NLP libraries
         or geographic databases. The paper's own text serves as a capitalization dictionary.
 
-        LIMITATIONS:
+        Limitations:
+
         - May miss proper nouns that only appear in the title
         - Section headers can pollute the capitalization data
         - Multi-word place names are handled word-by-word
@@ -482,9 +541,8 @@ class PDFProcessor:
         Returns:
             Normalized title with proper capitalization
         """
-        import re
 
-        # Check if title is mostly uppercase (>70% of letters are caps)
+        # Check whether title is mostly uppercase (>70% of letters are caps)
         letters = [c for c in title if c.isalpha()]
         if not letters:
             return title
@@ -495,6 +553,7 @@ class PDFProcessor:
             return title
 
         try:
+
             # Extract first page text to identify proper nouns
             doc = fitz.open(pdf_path)
             if len(doc) == 0:
@@ -511,6 +570,7 @@ class PDFProcessor:
             word_caps_count = {}  # word_lower -> {'caps': count, 'total': count}
 
             for sentence in sentences:
+
                 words = sentence.split()
 
                 for i, word in enumerate(words):
@@ -530,11 +590,14 @@ class PDFProcessor:
 
                     word_caps_count[word_lower]['total'] += 1
 
-                    # Check if word starts with capital
+                    # Check whether this word starts with a capital letter
                     if clean_word[0].isupper():
                         word_caps_count[word_lower]['caps'] += 1
 
-            # Build set of words that are proper nouns (capitalized >50% of time, min 2 occurrences)
+            # ...for each sentence on the first page
+
+            # Build the set of words that are proper nouns (capitalized >50% of time, min
+            # two occurrences)
             proper_nouns = set()
             for word_lower, counts in word_caps_count.items():
                 if counts['total'] >= 2 and counts['caps'] / counts['total'] > 0.5:
@@ -550,6 +613,7 @@ class PDFProcessor:
                              'at', 'to', 'by', 'in', 'of', 'up'}
 
             for i, word in enumerate(words):
+
                 # Remove punctuation for analysis
                 clean_word = re.sub(r'[^\w]', '', word)
                 word_lower = clean_word.lower()
@@ -590,12 +654,19 @@ class PDFProcessor:
 
                 result_words.append(prefix + result_word + suffix)
 
+            # ...for each word in the title
+
             return ' '.join(result_words)
 
         except Exception as e:
+
             # If anything goes wrong, fall back to simple title case
             print(f"  Warning: Error normalizing title case: {e}")
             return title.title()
+
+        # ...try/except
+
+    # ...def normalize_title_case(...)
 
     def extract_title(self, pdf_path: str) -> Dict[str, Any]:
         """
@@ -607,6 +678,7 @@ class PDFProcessor:
         Returns:
             Dict with 'title' (str), 'title_source' (str), and 'title_extraction_success' (bool)
         """
+
         try:
             doc = fitz.open(pdf_path)
 
@@ -625,6 +697,7 @@ class PDFProcessor:
 
             # Fall back to text analysis of first page
             if len(doc) > 0:
+
                 page = doc[0]
 
                 # Get text with font information
@@ -632,7 +705,9 @@ class PDFProcessor:
 
                 # Find text blocks with font size info
                 candidates = []
+
                 for block in blocks:
+
                     if block.get("type") == 0:  # Text block
                         for line in block.get("lines", []):
                             for span in line.get("spans", []):
@@ -648,7 +723,10 @@ class PDFProcessor:
                                         'y': bbox[1]
                                     })
 
+                # ...for each text block
+
                 if candidates:
+
                     # Sort by size (descending) then by y position (ascending)
                     candidates.sort(key=lambda x: (-x['size'], x['y']))
 
@@ -681,6 +759,8 @@ class PDFProcessor:
                             'title_extraction_success': True
                         }
 
+                # ...if we have candidate titles
+
             doc.close()
 
             # Extraction failed
@@ -698,6 +778,10 @@ class PDFProcessor:
                 'title_extraction_success': False
             }
 
+        # ...try/except
+
+    # ...def extract_title(...)
+
     def process_pdf(self, pdf_path: str) -> Dict[str, Any]:
         """
         Process a single PDF: extract images, text context, and title.
@@ -708,6 +792,7 @@ class PDFProcessor:
         Returns:
             Dict with PDF info, images, text content, and title
         """
+
         print(f"  Processing: {os.path.basename(pdf_path)}")
 
         # Extract title
@@ -731,13 +816,15 @@ class PDFProcessor:
             'images': images
         }
 
+    # ...def process_pdf(...)
 
-# =============================================================================
-# LLM PROCESSING
-# =============================================================================
+
+#%% LLM Processing
 
 class GeminiProcessor:
-    """Handles both batch and synchronous Gemini API processing."""
+    """
+    Handles both batch and synchronous Gemini API processing.
+    """
 
     def __init__(
         self,
@@ -759,6 +846,7 @@ class GeminiProcessor:
             image_size: Image size for resizing
             use_batch: Whether to use batch API
         """
+
         self.api_key = api_key
         self.small_model = small_model
         self.large_model = large_model
@@ -782,9 +870,7 @@ class GeminiProcessor:
             self.small_model_obj = genai.GenerativeModel(self.small_model)
             self.large_model_obj = genai.GenerativeModel(self.large_model)
 
-    # -------------------------------------------------------------------------
-    # Map Identification (Small Model)
-    # -------------------------------------------------------------------------
+    ## Map identification
 
     def identify_maps_sync(
         self,
@@ -793,7 +879,7 @@ class GeminiProcessor:
         checkpoint_interval: int = 10
     ) -> List[Dict[str, Any]]:
         """
-        Identify maps using synchronous API.
+        Identify maps using the Gemini synchronous API.
 
         Args:
             images: List of image dicts with 'path' field
@@ -803,12 +889,14 @@ class GeminiProcessor:
         Returns:
             List of results with map identification
         """
+
         results = []
         prompt = self.prompts['map_identification']
 
         print(f"Identifying maps using {self.small_model} (synchronous)...")
 
         for i, image in enumerate(images):
+
             print(f"  [{i+1}/{len(images)}] {os.path.basename(image['path'])}...", end=" ", flush=True)
 
             try:
@@ -850,6 +938,8 @@ class GeminiProcessor:
                     'error': str(e)
                 }
 
+            # ...try/except
+
             results.append(result)
 
             # Checkpoint
@@ -860,7 +950,11 @@ class GeminiProcessor:
             if (i + 1) % 10 == 0 and i < len(images) - 1:
                 time.sleep(2)
 
+        # ...for each image
+
         return results
+
+    # ...def identify_maps_sync(...)
 
     def identify_maps_batch(
         self,
@@ -868,7 +962,7 @@ class GeminiProcessor:
         poll_interval: int = 60
     ) -> List[Dict[str, Any]]:
         """
-        Identify maps using batch API.
+        Identify maps using the Gemini batch API.
 
         Args:
             images: List of image dicts with 'path' field
@@ -877,13 +971,17 @@ class GeminiProcessor:
         Returns:
             List of results with map identification
         """
+
         print(f"Identifying maps using {self.small_model} (batch)...")
 
         # Prepare requests
         print(f"  Preparing {len(images)} requests...")
         batch_requests = []
+
         for image in images:
+
             try:
+
                 image_bytes = ImageProcessor.resize_image_to_bytes(image['path'], self.image_size)
                 image_b64 = base64.b64encode(image_bytes).decode('utf-8')
 
@@ -902,9 +1000,15 @@ class GeminiProcessor:
                     }]
                 }
                 batch_requests.append(request)
+
             except Exception as e:
+
                 print(f"  Warning: Failed to prepare request for {image['path']}: {e}")
                 batch_requests.append(None)
+
+            # ...try/except
+
+        # ...for each image
 
         # Submit batch job
         print(f"  Submitting batch job...")
@@ -924,7 +1028,9 @@ class GeminiProcessor:
         responses = batch_job.dest.inlined_responses
 
         for i, (image, response) in enumerate(zip(images, responses)):
+
             try:
+
                 if response.response and hasattr(response.response, 'text') and response.response.text:
                     response_text = response.response.text.strip()
 
@@ -952,7 +1058,9 @@ class GeminiProcessor:
                         'success': False,
                         'error': 'No response from model'
                     }
+
             except Exception as e:
+
                 result = {
                     'image_path': image['path'],
                     'is_map': False,
@@ -964,11 +1072,15 @@ class GeminiProcessor:
 
             results.append(result)
 
+            # ...try/except
+
+        # ...for each image
+
         return results
 
-    # -------------------------------------------------------------------------
-    # Georeferencing (Large Model)
-    # -------------------------------------------------------------------------
+    # ...def identify_maps_sync(...)
+
+    ## Georeferencing
 
     def georeference_maps_sync(
         self,
@@ -985,14 +1097,16 @@ class GeminiProcessor:
             checkpoint_interval: How often to checkpoint
 
         Returns:
-            List of results with georeferencing
+            List of results with georeferencing information
         """
+
         results = []
         base_prompt = self.prompts['georeferencing']
 
         print(f"Georeferencing maps using {self.large_model} (synchronous)...")
 
         for i, image in enumerate(map_images):
+
             print(f"  [{i+1}/{len(map_images)}] {os.path.basename(image['path'])}...", end=" ", flush=True)
 
             try:
@@ -1058,6 +1172,8 @@ class GeminiProcessor:
                     'error': str(e)
                 }
 
+            # ...try/except
+
             results.append(result)
 
             # Checkpoint
@@ -1068,7 +1184,11 @@ class GeminiProcessor:
             if (i + 1) % 10 == 0 and i < len(map_images) - 1:
                 time.sleep(2)
 
+        # ...for each image
+
         return results
+
+    # ...def georeference_maps_sync(...)
 
     def georeference_maps_batch(
         self,
@@ -1085,6 +1205,7 @@ class GeminiProcessor:
         Returns:
             List of results with georeferencing
         """
+
         print(f"Georeferencing maps using {self.large_model} (batch)...")
 
         # Prepare requests
@@ -1093,7 +1214,9 @@ class GeminiProcessor:
         base_prompt = self.prompts['georeferencing']
 
         for image in map_images:
+
             try:
+
                 image_bytes = ImageProcessor.resize_image_to_bytes(image['path'], self.image_size)
                 image_b64 = base64.b64encode(image_bytes).decode('utf-8')
 
@@ -1117,9 +1240,15 @@ class GeminiProcessor:
                     }]
                 }
                 batch_requests.append(request)
+
             except Exception as e:
+
                 print(f"  Warning: Failed to prepare request for {image['path']}: {e}")
                 batch_requests.append(None)
+
+            # ...try/except
+
+        # ...for each image
 
         # Submit batch job
         print(f"  Submitting batch job...")
@@ -1139,7 +1268,9 @@ class GeminiProcessor:
         responses = batch_job.dest.inlined_responses
 
         for i, (image, response) in enumerate(zip(map_images, responses)):
+
             try:
+
                 if response.response and hasattr(response.response, 'text') and response.response.text:
                     response_text = response.response.text.strip()
 
@@ -1186,7 +1317,9 @@ class GeminiProcessor:
                         'success': False,
                         'error': 'No response from model'
                     }
+
             except Exception as e:
+
                 result = {
                     'image_path': image['path'],
                     'confidence': 0.0,
@@ -1195,16 +1328,23 @@ class GeminiProcessor:
                     'error': str(e)
                 }
 
+            # ...try/except
+
             results.append(result)
+
+        # ...for each image
 
         return results
 
-    # -------------------------------------------------------------------------
-    # Helper Methods
-    # -------------------------------------------------------------------------
+    # ...def georeference_maps_batch(...)
+
+    ## Helper methods
 
     def _format_text_context(self, text_context: Dict[str, str]) -> str:
-        """Format text context for inclusion in prompt."""
+        """
+        Format text context for inclusion in prompt.
+        """
+
         parts = []
 
         if text_context.get('first_page'):
@@ -1226,7 +1366,10 @@ class GeminiProcessor:
         return "\n".join(parts)
 
     def _poll_batch_completion(self, batch_job: Any, poll_interval: int) -> Any:
-        """Poll batch job until completion."""
+        """
+        Poll batch job until completion.
+        """
+
         print(f"  Polling for completion (interval: {poll_interval}s)...")
 
         start_time = time.time()
@@ -1239,6 +1382,7 @@ class GeminiProcessor:
         }
 
         while True:
+
             try:
                 current_job = self.batch_client.batches.get(name=batch_job.name)
                 poll_count += 1
@@ -1273,13 +1417,19 @@ class GeminiProcessor:
                     print(f"  Will retry in {poll_interval} seconds...")
                     time.sleep(poll_interval)
 
+            # ...try/except
 
-# =============================================================================
-# MAIN FUNCTION
-# =============================================================================
+        # ...while the job is still running
+
+    # ...def _poll_batch_completion(...)
+
+
+#%% Command-line driver
 
 def main():
-    """Main workflow for georeferencing ecology papers."""
+    """
+    Main workflow for georeferencing ecology papers.
+    """
 
     parser = argparse.ArgumentParser(
         description="Georeference figures in ecology papers using LLMs",
@@ -1403,18 +1553,18 @@ Examples:
 
     try:
         # Load API key
-        print("1. Loading API key...")
+        print("Loading API key...")
         api_key = load_api_key()
         print("✓ API key loaded\n")
 
         # Load prompts
-        print("2. Loading prompts...")
+        print("Loading prompts...")
         prompts = load_prompts()
         print("✓ Prompts loaded\n")
 
         # Handle resume or new job
         if args.resume:
-            print("3. Resuming from checkpoint...")
+            print("Resuming from checkpoint...")
             with open(args.resume, 'r') as f:
                 status = json.load(f)
 
@@ -1438,7 +1588,7 @@ Examples:
             print(f"  Georeferencing: {len(georef_results)} complete\n")
         else:
             # New job - enumerate and process PDFs
-            print("3. Enumerating PDF files...")
+            print("Enumerating PDF files...")
             pdf_files = []
             if args.recursive:
                 for root, dirs, files in os.walk(args.input_folder):
@@ -1475,13 +1625,14 @@ Examples:
             else:
                 temp_folder = tempfile.mkdtemp(prefix='georef_')
 
-            print(f"4. Processing PDF files...")
+            print(f"Processing PDF files...")
             print(f"  Temporary folder: {temp_folder}\n")
 
             pdf_processor = PDFProcessor(temp_folder)
             pdf_results = {}
 
             for i, pdf_path in enumerate(pdf_files):
+
                 print(f"  [{i+1}/{len(pdf_files)}]", end=" ")
                 try:
                     result = pdf_processor.process_pdf(pdf_path)
@@ -1496,12 +1647,16 @@ Examples:
                         'error': str(e)
                     }
 
+            # ...for each PDF file
+
             total_images = sum(r['num_images'] for r in pdf_results.values())
             print(f"\n✓ Processed {len(pdf_files)} PDFs")
             print(f"✓ Extracted {total_images} images\n")
 
             map_id_results = {}
             georef_results = {}
+
+        # ...if we are/aren't resuming an existing job
 
         # Create status file path
         if args.resume:
@@ -1540,7 +1695,8 @@ Examples:
 
         # Estimate cost
         if not args.resume:
-            print("5. Estimating cost...")
+
+            print("Estimating cost...")
             num_images = len(all_images)
             num_maps_estimate = len(pdf_results)  # Assume 1 map per paper
 
@@ -1570,9 +1726,14 @@ Examples:
                     sys.exit(0)
             print()
 
+        # ...if we aren't resuming an existing job
+
         # Define checkpoint callback
         def save_checkpoint(stage: str, results: Dict):
-            """Save checkpoint with current progress."""
+            """
+            Save checkpoint with current progress.
+            """
+
             status_data = {
                 'parameters': {
                     'input_folder': args.input_folder,
@@ -1594,10 +1755,11 @@ Examples:
             with open(status_file, 'w') as f:
                 json.dump(status_data, f, indent=2)
 
-        # Stage 1: Map identification
+        ## Map identification
+
         if images_needing_map_id:
-            step_num = 6 if not args.resume else 4
-            print(f"{step_num}. Identifying maps ({len(images_needing_map_id)} images)...\n")
+
+            print(f" Identifying maps ({len(images_needing_map_id)} images)...\n")
 
             if args.batch:
                 new_results = processor.identify_maps_batch(
@@ -1635,7 +1797,10 @@ Examples:
         else:
             print("✓ All images already processed for map identification\n")
 
-        # Stage 2: Georeferencing
+        # ...if we have images that need map identification
+
+        ## Georeferencing
+
         # Collect maps that need georeferencing
         maps_needing_georef = []
         for img in all_images:
@@ -1647,8 +1812,7 @@ Examples:
                         maps_needing_georef.append(img)
 
         if maps_needing_georef:
-            step_num = 7 if not args.resume else (5 if images_needing_map_id else 4)
-            print(f"{step_num}. Georeferencing maps ({len(maps_needing_georef)} maps)...\n")
+            print(f" Georeferencing maps ({len(maps_needing_georef)} maps)...\n")
 
             if args.batch:
                 new_results = processor.georeference_maps_batch(
@@ -1687,12 +1851,15 @@ Examples:
         else:
             print("✓ All maps already georeferenced\n")
 
-        # Stage 3: Build final output
+        ## Build final output
+
         print("Building final output...\n")
 
         # Organize results by PDF
         final_results = []
+
         for pdf_path, pdf_result in pdf_results.items():
+
             pdf_output = {
                 'pdf_path': pdf_path,
                 'pdf_filename': pdf_result['pdf_filename'],
@@ -1704,6 +1871,7 @@ Examples:
             }
 
             for img in pdf_result['images']:
+
                 img_path = img['path']
                 img_output = {
                     'image_path': img_path,
@@ -1735,7 +1903,11 @@ Examples:
 
                 pdf_output['images'].append(img_output)
 
+            # ...for each image in this PDF file
+
             final_results.append(pdf_output)
+
+        # ...for each PDFfile
 
         # Save final output
         output_data = {
@@ -1785,6 +1957,9 @@ Examples:
         traceback.print_exc()
         sys.exit(1)
 
+    # ...try/except
+
+# ...def main(...)
 
 if __name__ == "__main__":
     main()
