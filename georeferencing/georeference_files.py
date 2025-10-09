@@ -1114,6 +1114,11 @@ Examples:
         help='Maximum number of PDFs to process (for testing)'
     )
 
+    # Show help if no arguments provided
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
+
     args = parser.parse_args()
 
     # Validate arguments
