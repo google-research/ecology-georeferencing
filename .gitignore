@@ -39,4 +39,3 @@ wheels/
 # Job status and checkpoint files
 georeferencing_*_status.json
 *.tmp.json
-

@@ -8,25 +8,7 @@ This folder contains a demonstration implementation of map georeferencing in eco
 - [Installation](#installation)
 - [Setup](#setup)
 - [Georeferencing](#georeferencing)
-  - [Basic usage](#basic-usage)
-  - [Batch API (50% cost discount)](#batch-api-50-cost-discount)
-  - [Test on a small set](#test-on-a-small-set)
-  - [Recursive search](#recursive-search)
-  - [Resume interrupted jobs](#resume-interrupted-jobs)
-  - [Command-line options](#command-line-options)
-  - [Workflow](#workflow)
-  - [Output format](#output-format)
-  - [Cost estimation](#cost-estimation)
-  - [Checkpointing and resuming](#checkpointing-and-resuming)
-  - [Prompts](#prompts)
-  - [Troubleshooting](#troubleshooting)
-  - [Advanced usage](#advanced-usage)
-  - [Limitations](#limitations)
 - [Visualization](#visualization)
-  - [Basic usage](#basic-usage-1)
-  - [Command-line options](#command-line-options-1)
-  - [Features](#features)
-  - [Output structure](#output-structure)
 - [Future work](#future-work)
 - [Contributing](#contributing)
 
@@ -66,30 +48,22 @@ Process PDFs with default settings (synchronous API, Gemini 2.5 Flash for map ID
 python -m georeferencing.georeference_files /path/to/pdfs --output-file results.json
 ```
 
-### Batch API (50% cost discount)
+### Using the Gemini Batch API (~50% less expensive than the synchronous API)
 
-Use the batch API for large jobs:
+Use the Gemini batch API for large jobs:
 
 ```bash
 python -m georeferencing.georeference_files /path/to/pdfs --output-file results.json --batch
 ```
 
-Batch jobs can take several hours to complete but cost 50% less than synchronous API.
+Batch jobs can take several hours to complete but cost ~50% less than synchronous API.
 
-### Test on a small set
+### To test on a small set
 
 Process only the first N PDFs for testing:
 
 ```bash
 python -m georeferencing.georeference_files /path/to/pdfs --output-file results.json --max-pdfs 5
-```
-
-### Recursive search
-
-Search for PDFs in subdirectories:
-
-```bash
-python -m georeferencing.georeference_files /path/to/pdfs --output-file results.json --recursive
 ```
 
 ### Resume interrupted jobs
@@ -208,37 +182,16 @@ The output JSON file contains:
 
 ### Cost estimation
 
-The script estimates costs before processing (for Gemini 2.5 Flash and Pro only):
+The script estimates costs before processing (for Gemini 2.5 Flash and Pro only).
 
-#### Assumptions
+The assumptions used for cost estimation are:
 
 - Map identification prompt: ~300 tokens
 - Map identification response: ~200 tokens
 - Georeferencing prompt: ~1000 tokens (includes text from multiple pages)
 - Georeferencing response: ~200 tokens
 - Image tokens: 258 per 768×768 tile
-
-#### Pricing (as of January 2025)
-
-**Synchronous API**
-
-- Gemini 2.5 Flash: $0.30 input / $2.50 output per 1M tokens
-- Gemini 2.5 Pro: $1.25 input / $10.00 output per 1M tokens
-
-**Batch API (50% discount)**
-
-- Gemini 2.5 Flash: $0.15 input / $1.25 output per 1M tokens
-- Gemini 2.5 Pro: $0.625 input / $5.00 output per 1M tokens
-
-**Example** 
-
-Processing 100 papers (~500 images, ~100 maps) with synchronous API:
-
-- Map identification (Flash): ~$0.17
-- Georeferencing (Pro): ~$0.14
-- **Total: ~$0.31**
-
-With the batch API, the same job would cost ~$0.15 (50% savings).
+- Gemini 2.5 Flash/Pro pricing as of October 2025
 
 ### Checkpointing and resuming
 
@@ -249,7 +202,7 @@ The script creates status files (`georeferencing_TIMESTAMP_status.json`) that al
 - Resume with: `python -m georeferencing.georeference_files --resume <status-file>`
 - Status file is automatically cleaned up on successful completion
 
-**Note:** When resuming, model settings and image size are locked from the original job.
+When resuming, model settings and image size are locked from the original job.
 
 ### Prompts
 
@@ -263,7 +216,7 @@ Prompts for map identification and georeferencing are stored in `prompts.json`. 
 **Georeferencing prompt:**
 
 - Uses map image + text context from paper
-- Returns JSON with 4-corner coordinates, confidence, and explanation
+- Returns JSON with four-corner coordinates, confidence, and explanation
 - Handles insets (uses smallest area as AOI)
 - Provides coordinates only if confidence > 0
 
@@ -277,18 +230,14 @@ Prompts for map identification and georeferencing are stored in `prompts.json`. 
 - Try `--recursive` if PDFs are in subdirectories
 
 **Cost estimate shows wrong amount**
-- Cost estimation only works for Gemini 2.5 Flash and Pro
-- Estimate assumes 768px images; actual cost varies with `--image-size`
+- Cost estimation only works for Gemini 2.5 Flash and Pro, and is hard-coded to 2025 pricing
+- Estimate assumes the default image submission size of 768px on the long side; actual cost varies with `--image-size`
 - Estimate assumes 1 map per paper; actual may differ
 
 **Batch job takes too long**
 - Batch jobs can take several hours for large datasets
 - Use synchronous API for faster results (2x cost)
 - Monitor progress with status file timestamps
-
-**Out of memory during PDF processing**
-- Use `--max-pdfs` to process in smaller batches
-- Reduce `--image-size` (e.g., 512 instead of 768)
 
 ### Advanced usage
 
@@ -323,15 +272,6 @@ python -m georeferencing.georeference_files /path/to/pdfs \
   --auto-confirm
 ```
 
-### Limitations
-
-- Maximum 1000 PDFs per job (can be bypassed with confirmation)
-- Only supports Gemini models (Google AI API)
-- Cost estimation only available for Gemini 2.5 Flash and Pro
-- Georeferencing quality depends on map clarity and available text context
-- Images must be at least 100×100 pixels
-- Text-heavy PDFs may generate very long prompts
-
 ## Visualization
 
 The `georeferencing_visualizer.py` script creates an interactive HTML map visualization of georeferencing results.
@@ -365,20 +305,23 @@ Open `viz/index.html` in any web browser to view the results.
 
 The visualization provides an interactive interface with three main areas:
 
-**Left Sidebar - Figure List**
+**Left sidebar: figure list**
+
 - Lists all successfully georeferenced figures
 - Each entry shows: paper filename, page number, confidence percentage
 - Click any figure to view on map
 - Separate "Failed Georeferencing" section shows maps that couldn't be georeferenced
 
-**Center Panel - Interactive Map**
+**Center panel: interactive Map**
+
 - OpenStreetMap basemap with standard pan/zoom controls
 - Blue polygons show georeferenced areas (4-corner coordinates)
 - Hover over polygon to see details in right sidebar
 - Click polygon to select and navigate
 - Map automatically fits to show all georeferenced areas on load
 
-**Right Sidebar - Details View**
+**Right sidebar: details view**
+
 - Appears when hovering over or clicking a figure
 - Shows:
   - Paper title (currently uses filename)
@@ -389,11 +332,13 @@ The visualization provides an interactive interface with three main areas:
   - Model's explanation of how it georeferenced the map
 
 **Navigation**
+
 - Previous/Next buttons appear at bottom after selecting a figure
 - Cycle through all georeferenced figures sequentially
 - Map automatically pans and zooms to each figure
 
-**Multiple Maps per Paper**
+**Multiple maps per paper**
+
 - Each georeferenced map gets its own entry in the list
 - Papers with multiple maps appear multiple times
 - Example: "paper.pdf - Page 3" and "paper.pdf - Page 7"
@@ -403,7 +348,7 @@ The visualization provides an interactive interface with three main areas:
 The output folder contains:
 
 ```
-viz/
+root/
 ├── index.html          # Main visualization file (open in browser)
 └── images/             # Resized map images
     ├── img_0001.jpg
@@ -411,20 +356,18 @@ viz/
     └── ...
 ```
 
-All images are referenced by relative path, so the entire folder can be:
-- Moved to another location
-- Archived and shared
-- Hosted on a web server
-- Opened directly from filesystem
+All images are referenced by relative path.
 
-Images are automatically resized to `--max-image-size` (default 800px) to reduce file size while maintaining quality for visualization purposes.
+Images are automatically resized to `--max-image-size` (default 800px) to reduce file size while maintaining quality for visualization.
 
 ## Future work
 
+* Track actual tokens submitted for real jobs, use that to update cost estimation constants (e.g. the typical number of maps per PDF file)
+* Timeout/rate errors are handled gracefully, but not retried; add a retry mechanism
 * Parallelize PDF processing and LLM submission
 * Support local LLMs via Ollama
 * Add validation against ground truth, when run on the benchmark dataset
 
 ## Contributing
 
-This is part of the ecology-georeferencing benchmark dataset project. For issues and contributions, see the main repository README.
+This is part of the [ecology georeferencing benchmark dataset project](https://github.com/google-research/ecology-georeferencing). For issues and contributions, see the main repository README.

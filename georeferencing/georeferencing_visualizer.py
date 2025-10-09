@@ -1,4 +1,5 @@
 """
+
 Visualize georeferencing results on an interactive map.
 
 This script takes the JSON output from georeference_files.py and creates
@@ -7,7 +8,10 @@ an interactive HTML visualization with:
 - Left sidebar listing papers and figures
 - Right sidebar showing details on hover/click
 - Navigation buttons to cycle through figures
+
 """
+
+#%% Imports and constants
 
 import argparse
 import base64
@@ -15,11 +19,14 @@ import json
 import os
 import shutil
 import sys
+
 from pathlib import Path
 from typing import Dict, List, Any
 
 from PIL import Image
 
+
+#%%  Support functions
 
 def resize_image(input_path: str, output_path: str, max_size: int = 800):
     """
@@ -30,7 +37,9 @@ def resize_image(input_path: str, output_path: str, max_size: int = 800):
         output_path: Path to save resized image
         max_size: Maximum dimension (width or height)
     """
+
     try:
+
         with Image.open(input_path) as img:
             # Convert to RGB if necessary
             if img.mode != 'RGB':
@@ -39,7 +48,7 @@ def resize_image(input_path: str, output_path: str, max_size: int = 800):
             width, height = img.size
 
             # Only resize if image is larger than max_size
-            if width > max_size or height > max_size:
+            if (width > max_size) or (height > max_size):
                 if width > height:
                     new_width = max_size
                     new_height = int((height * max_size) / width)
@@ -50,16 +59,24 @@ def resize_image(input_path: str, output_path: str, max_size: int = 800):
                 resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
                 resized_img.save(output_path, 'JPEG', quality=85, optimize=True)
             else:
-                # Image is small enough, just copy
+                # Image is already small enough, just copy
                 shutil.copy2(input_path, output_path)
 
+        # ...with Image.open(...)
+
     except Exception as e:
-        print(f"  Warning: Failed to process image {input_path}: {e}")
-        # Try to copy original as fallback
+
+        print(f"  Warning: Failed to resize image {input_path}: {e}")
+
+        # Copy as fallback
         try:
             shutil.copy2(input_path, output_path)
         except:
             pass
+
+        # ...try/catch
+
+# ...def resize_image(...)
 
 
 def prepare_output_folder(output_folder: str, results_data: Dict[str, Any], max_image_size: int) -> Dict[str, str]:
@@ -74,6 +91,7 @@ def prepare_output_folder(output_folder: str, results_data: Dict[str, Any], max_
     Returns:
         Dict mapping original image paths to relative paths in output folder
     """
+
     output_path = Path(output_folder)
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -86,7 +104,9 @@ def prepare_output_folder(output_folder: str, results_data: Dict[str, Any], max_
     print("Copying and resizing images...")
 
     for pdf_result in results_data['results']:
+
         for img in pdf_result['images']:
+
             # Only process images that were georeferenced
             if 'georeferencing' in img and img['georeferencing'].get('success', False):
                 original_path = img['image_path']
@@ -107,8 +127,14 @@ def prepare_output_folder(output_folder: str, results_data: Dict[str, Any], max_
                 # Store relative path
                 image_mapping[original_path] = f"images/{new_filename}"
 
+        # ...for each image in this PDF file
+
+    # ...for each PDF file
+
     print(f"✓ Processed {len(image_mapping)} images\n")
     return image_mapping
+
+# ...def prepare_output_folder(...)
 
 
 def generate_html(results_data: Dict[str, Any], image_mapping: Dict[str, str]) -> str:
@@ -122,18 +148,21 @@ def generate_html(results_data: Dict[str, Any], image_mapping: Dict[str, str]) -
     Returns:
         HTML content as string
     """
+
     # Prepare data for JavaScript
     figures_data = []
     failed_figures = []
 
     for pdf_result in results_data['results']:
+
         pdf_path = pdf_result['pdf_path']
         pdf_filename = pdf_result['pdf_filename']
         pdf_title = pdf_result.get('title', pdf_filename)
         title_extraction_success = pdf_result.get('title_extraction_success', False)
 
         for img in pdf_result['images']:
-            # Check if this was identified as a map
+
+            # Check whether this was identified as a map
             if 'map_identification' not in img:
                 continue
 
@@ -141,7 +170,7 @@ def generate_html(results_data: Dict[str, Any], image_mapping: Dict[str, str]) -
             if not map_id.get('is_map', False):
                 continue
 
-            # Check if georeferencing was successful
+            # Check wheter georeferencing was successful
             if 'georeferencing' in img and img['georeferencing'].get('success', False):
                 georef = img['georeferencing']
                 coords = georef.get('coordinates')
@@ -183,6 +212,10 @@ def generate_html(results_data: Dict[str, Any], image_mapping: Dict[str, str]) -
                     'image_filename': img['image_filename'],
                     'page': img['page']
                 })
+
+        # ...for each image in this PDF file
+
+    # ...for each PDF file
 
     # Convert to JSON for embedding
     figures_json = json.dumps(figures_data, indent=2)
@@ -655,6 +688,8 @@ def generate_html(results_data: Dict[str, Any], image_mapping: Dict[str, str]) -
 </html>
 """
     return html
+
+# ...def generate_html(...)
 
 
 def main():
