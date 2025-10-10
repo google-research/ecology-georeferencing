@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ecology-georeferencing"
+version = "0.1.0"
+description = "Tools for georeferencing figures in ecology papers using LLMs"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Google Research"}
+]
+dependencies = [
+    "pymupdf>=1.23.0",  # PDF processing (fitz)
+    "google-generativeai>=0.3.0",  # Gemini API
+    "google-genai",  # Gemini Batch API
+    "Pillow>=10.0.0",  # Image processing
+]
+
+[project.optional-dependencies]
+dev = [
+    "jupyter",
+    "ipython",
+]
+
+[tool.setuptools.packages.find]
+include = ["georeferencing*"]
