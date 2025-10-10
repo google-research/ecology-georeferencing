@@ -22,6 +22,8 @@ Before we can ask high-level questions that connect figure content to spatial co
 
 ## What's in this repo?
 
+### Benchmark dataset
+
 This repo contains a set of ground truth data points that will facilitate the evaluation of current LLMs on the figure georeferencing task.  Specifically, for each data point, we provide:
 
 * A PDF file of an ecology paper, along with a link to the original paper
@@ -56,6 +58,14 @@ Multiple data points may have the same record_id and paper_title, but different 
 Here is an example of what the sample notebook renders after loading the .geojson annotation for the above figure:
 
 ![](sample_image_georeferenced.png)
+
+### Demo implementation
+
+The [georeferencing](georeferencing/README.md) folder contains a sample georeferencing implementation that uses Gemini to identify maps in PDF files, georeference them, and render the results on a map.
+
+## Contributing
+
+If you want to make corrections to the benchmark dataset or contributions to the demo implementation, we welcome contributions.  If you submit a PR to this repo, you will be asked to sign a contributor license agreement; see [CONTRIBUTING.md](CONTRIBUTING.md) for more information.
 
 *This is not an officially supported Google product.*
 

@@ -132,7 +132,9 @@ def load_prompts() -> Dict[str, str]:
         raise FileNotFoundError(f"Prompts file not found at {prompts_path}")
 
 
-def calculate_image_tokens(width: int, height: int, tile_size: int = 768) -> int:
+def calculate_image_tokens(width: int,
+                           height: int,
+                           tile_size: int = 768) -> int:
     """
     Calculate token count for an image based on Gemini's tiling system.
 
@@ -244,7 +246,8 @@ class ImageProcessor:
     """
 
     @staticmethod
-    def resize_image_to_bytes(image_path: str, max_size: int = 768) -> bytes:
+    def resize_image_to_bytes(image_path: str,
+                              max_size: int = 768) -> bytes:
         """
         Resize image to specified max dimension and return as JPEG bytes.
 
@@ -314,7 +317,9 @@ class PDFProcessor:
     Handles PDF text and image extraction.
     """
 
-    def __init__(self, temp_folder: str, min_image_size: int = 100):
+    def __init__(self,
+                 temp_folder: str,
+                 min_image_size: int = 100):
         """
         Initialize PDF processor.
 
@@ -417,7 +422,9 @@ class PDFProcessor:
 
     # ...def extract_images_from_pdf(...)
 
-    def extract_text_from_page(self, pdf_path: str, page_num: int) -> str:
+    def extract_text_from_page(self,
+                               pdf_path: str,
+                               page_num: int) -> str:
         """
         Extract text from a specific page.
 
@@ -443,7 +450,9 @@ class PDFProcessor:
             print(f"  Warning: Failed to extract text from page {page_num}: {e}")
             return ""
 
-    def extract_text_context(self, pdf_path: str, image_page: int) -> Dict[str, str]:
+    def extract_text_context(self,
+                             pdf_path: str,
+                             image_page: int) -> Dict[str, str]:
         """
         Extract text context for an image: first page, image page, and adjacent pages.
 
@@ -504,7 +513,9 @@ class PDFProcessor:
 
     # ...def extract_text_context(...)
 
-    def normalize_title_case(self, title: str, pdf_path: str) -> str:
+    def normalize_title_case(self,
+                             title: str,
+                             pdf_path: str) -> str:
         """
         Convert all-caps titles to proper case using paper text as context.
 
@@ -982,7 +993,8 @@ class GeminiProcessor:
 
             try:
 
-                image_bytes = ImageProcessor.resize_image_to_bytes(image['path'], self.image_size)
+                image_bytes = \
+                    ImageProcessor.resize_image_to_bytes(image['path'], self.image_size)
                 image_b64 = base64.b64encode(image_bytes).decode('utf-8')
 
                 request = {
@@ -1031,7 +1043,10 @@ class GeminiProcessor:
 
             try:
 
-                if response.response and hasattr(response.response, 'text') and response.response.text:
+                if (response.response and \
+                    hasattr(response.response, 'text') and \
+                    response.response.text):
+
                     response_text = response.response.text.strip()
 
                     if response_text.startswith('```json'):
@@ -1049,7 +1064,9 @@ class GeminiProcessor:
                         'reasoning': result_json.get('reasoning', ''),
                         'success': True
                     }
+
                 else:
+
                     result = {
                         'image_path': image['path'],
                         'is_map': False,
@@ -1365,7 +1382,9 @@ class GeminiProcessor:
 
         return "\n".join(parts)
 
-    def _poll_batch_completion(self, batch_job: Any, poll_interval: int) -> Any:
+    def _poll_batch_completion(self,
+                               batch_job: Any,
+                               poll_interval: int) -> Any:
         """
         Poll batch job until completion.
         """

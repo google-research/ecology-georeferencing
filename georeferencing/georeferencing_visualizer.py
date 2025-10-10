@@ -16,6 +16,7 @@ an interactive HTML visualization with:
 import argparse
 import json
 import os
+import random
 import shutil
 import sys
 
@@ -29,7 +30,9 @@ from georeferencing.html_template import VISUALIZATION_HTML
 
 #%%  Support functions
 
-def resize_image(input_path: str, output_path: str, max_size: int = 800):
+def resize_image(input_path: str,
+                 output_path: str,
+                 max_size: int = 800):
     """
     Resize image to fit within max_size while preserving aspect ratio.
 
@@ -80,7 +83,10 @@ def resize_image(input_path: str, output_path: str, max_size: int = 800):
 # ...def resize_image(...)
 
 
-def prepare_output_folder(output_folder: str, results_data: Dict[str, Any], max_image_size: int) -> Dict[str, str]:
+def prepare_output_folder(output_folder: str,
+                          results_data: Dict[str, Any],
+                          max_image_size: int,
+                          overwrite_images: bool = False) -> Dict[str, str]:
     """
     Prepare output folder and copy/resize images.
 
@@ -88,6 +94,7 @@ def prepare_output_folder(output_folder: str, results_data: Dict[str, Any], max_
         output_folder: Path to output folder
         results_data: Parsed JSON data
         max_image_size: Maximum image dimension
+        overwrite_images: If True, overwrite existing images; if False, skip existing images
 
     Returns:
         Dict mapping original image paths to relative paths in output folder
@@ -101,6 +108,7 @@ def prepare_output_folder(output_folder: str, results_data: Dict[str, Any], max_
 
     image_mapping = {}
     image_counter = 0
+    skipped_count = 0
 
     print("Copying and resizing images...")
 
@@ -122,6 +130,13 @@ def prepare_output_folder(output_folder: str, results_data: Dict[str, Any], max_
                 new_filename = f"img_{image_counter:04d}{ext}"
                 output_image_path = images_path / new_filename
 
+                # Check if image already exists
+                if output_image_path.exists() and not overwrite_images:
+                    skipped_count += 1
+                    # Store relative path even if skipping
+                    image_mapping[original_path] = f"images/{new_filename}"
+                    continue
+
                 # Resize and copy
                 resize_image(original_path, str(output_image_path), max_image_size)
 
@@ -132,13 +147,17 @@ def prepare_output_folder(output_folder: str, results_data: Dict[str, Any], max_
 
     # ...for each PDF file
 
-    print(f"✓ Processed {len(image_mapping)} images\n")
+    if skipped_count > 0:
+        print(f"✓ Processed {len(image_mapping)} images ({skipped_count} skipped, already exist)\n")
+    else:
+        print(f"✓ Processed {len(image_mapping)} images\n")
     return image_mapping
 
 # ...def prepare_output_folder(...)
 
 
-def generate_html(results_data: Dict[str, Any], image_mapping: Dict[str, str]) -> str:
+def generate_html(results_data: Dict[str, Any],
+                  image_mapping: Dict[str, str]) -> str:
     """
     Generate HTML content for the visualization.
 
@@ -233,6 +252,71 @@ def generate_html(results_data: Dict[str, Any], image_mapping: Dict[str, str]) -
 # ...def generate_html(...)
 
 
+def sample_results(results_data: Dict[str, Any],
+                   sample_size: int,
+                   random_seed: int) -> Dict[str, Any]:
+    """
+    Randomly sample georeferenced figures from results data.
+
+    Args:
+        results_data: Full results data from JSON
+        sample_size: Number of figures to sample
+        random_seed: Random seed for reproducibility
+
+    Returns:
+        New results_data dict with only sampled figures
+    """
+
+    # Extract all successfully georeferenced (pdf_result, image) pairs
+    georeferenced_pairs = []
+
+    for pdf_result in results_data['results']:
+        for img in pdf_result['images']:
+            # Check if this is a successfully georeferenced map
+            if ('map_identification' in img and
+                img['map_identification'].get('is_map', False) and
+                'georeferencing' in img and
+                img['georeferencing'].get('success', False)):
+                georeferenced_pairs.append((pdf_result, img))
+
+    total_georeferenced = len(georeferenced_pairs)
+
+    if sample_size >= total_georeferenced:
+        # No sampling needed, return original data
+        return results_data
+
+    # Set random seed and sample
+    random.seed(random_seed)
+    sampled_pairs = random.sample(georeferenced_pairs, sample_size)
+
+    # Reconstruct results_data with only sampled images
+    # Group sampled images by PDF
+    pdf_to_images = {}
+    for pdf_result, img in sampled_pairs:
+        pdf_path = pdf_result['pdf_path']
+        if pdf_path not in pdf_to_images:
+            pdf_to_images[pdf_path] = {
+                'pdf_result': pdf_result,
+                'images': []
+            }
+        pdf_to_images[pdf_path]['images'].append(img)
+
+    # Build new results list
+    new_results = []
+    for pdf_path, data in pdf_to_images.items():
+        pdf_result = data['pdf_result'].copy()
+        pdf_result['images'] = data['images']
+        new_results.append(pdf_result)
+
+    # Create new results_data
+    sampled_results_data = results_data.copy()
+    sampled_results_data['results'] = new_results
+
+    return sampled_results_data
+
+# ...def sample_results(...)
+
+
 #%% Command-line driver
 
 def main():
@@ -250,6 +334,12 @@ Examples:
 
   # Custom image size
   python -m georeferencing.georeferencing_visualizer results.json --output-folder viz --max-image-size 1024
+
+  # Randomly sample 50 figures for quick preview (uses seed=0 by default)
+  python -m georeferencing.georeferencing_visualizer results.json --output-folder viz --sample 50
+
+  # Sample with different random seed
+  python -m georeferencing.georeferencing_visualizer results.json --output-folder viz --sample 50 --random-seed 42
         """
     )
 
@@ -267,6 +357,23 @@ Examples:
         type=int,
         default=800,
         help='Maximum image dimension in pixels (default: 800)'
+    )
+    parser.add_argument(
+        '--overwrite-images',
+        action='store_true',
+        help='Overwrite existing images in output folder (default: skip existing images)'
+    )
+    parser.add_argument(
+        '--sample',
+        type=int,
+        metavar='N',
+        help='Randomly sample N georeferenced figures (default: use all figures)'
+    )
+    parser.add_argument(
+        '--random-seed',
+        type=int,
+        default=0,
+        help='Random seed for sampling (default: 0)'
     )
 
     # Show help if no arguments provided
@@ -290,9 +397,28 @@ Examples:
             results_data = json.load(f)
         print(f"✓ Loaded results from {args.input_file}\n")
 
+        # Apply sampling if requested
+        if args.sample is not None:
+            # Count total georeferenced figures before sampling
+            total_georeferenced = sum(
+                1 for pdf in results_data['results']
+                for img in pdf['images']
+                if ('map_identification' in img and
+                    img['map_identification'].get('is_map', False) and
+                    'georeferencing' in img and
+                    img['georeferencing'].get('success', False))
+            )
+
+            if args.sample < total_georeferenced:
+                print(f"Sampling {args.sample} of {total_georeferenced} georeferenced figures (seed={args.random_seed})...")
+                results_data = sample_results(results_data, args.sample, args.random_seed)
+                print(f"✓ Sampled {args.sample} figures\n")
+            else:
+                print(f"Sample size ({args.sample}) >= total georeferenced figures ({total_georeferenced}), using all figures\n")
+
         # Prepare output folder and copy images
         print("Preparing output folder...")
-        image_mapping = prepare_output_folder(args.output_folder, results_data, args.max_image_size)
+        image_mapping = prepare_output_folder(args.output_folder, results_data, args.max_image_size, args.overwrite_images)
 
         # Generate HTML
         print("Generating HTML...")

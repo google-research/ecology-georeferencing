@@ -318,18 +318,13 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
             const polygon = L.polygon(latLngs, {{
                 color: '#007bff',
                 fillColor: '#007bff',
-                fillOpacity: 0.2,
+                fillOpacity: 0,  // Default: outline only
                 weight: 2
             }}).addTo(map);
 
             // Add hover and click events
             polygon.on('mouseover', function() {{
-                this.setStyle({{fillOpacity: 0.4}});
                 showDetails(index);
-            }});
-
-            polygon.on('mouseout', function() {{
-                this.setStyle({{fillOpacity: 0.2}});
             }});
 
             polygon.on('click', function() {{
@@ -408,6 +403,12 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
                     item.classList.remove('active');
                 }}
             }});
+
+            // Reset all polygons to outline only, fill the selected one
+            Object.values(polygons).forEach(p => p.setStyle({{fillOpacity: 0}}));
+            if (polygons[index]) {{
+                polygons[index].setStyle({{fillOpacity: 0.2}});
+            }}
 
             // Show details
             showDetails(index);
