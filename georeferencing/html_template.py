@@ -495,7 +495,6 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
             <div class="detail-section">
                 <h3>Figure</h3>
                 <img id="detail-image" class="detail-image" src="" alt="Map figure">
-                <p style="margin-top: 8px; font-size: 12px;" id="detail-page"></p>
             </div>
 
             <div class="detail-section">
@@ -513,7 +512,7 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
             <div class="api-key-section">
                 <label for="api-key-input">Gemini API Key:</label>
                 <input type="password" id="api-key-input" placeholder="Enter your Gemini API key">
-                <small>Your key is stored locally in your browser and never sent to our servers.</small>
+                <small>Your key is stored locally in your browser.</small>
             </div>
             <div id="chat-messages"></div>
             <div id="chat-input-container">
@@ -565,11 +564,7 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
                 weight: 2
             }}).addTo(map);
 
-            // Add hover and click events
-            polygon.on('mouseover', function() {{
-                showDetails(index);
-            }});
-
+            // Add click event
             polygon.on('click', function() {{
                 selectFigure(index);
             }});
@@ -627,7 +622,6 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
             document.getElementById('detail-paper-title').textContent = figure.pdf_title;
             document.getElementById('detail-pdf-link').href = figure.pdf_path;
             document.getElementById('detail-image').src = figure.image_path;
-            document.getElementById('detail-page').textContent = `Page ${{figure.page + 1}} • ${{figure.image_filename}}`;
             document.getElementById('detail-confidence').textContent = `${{(figure.confidence * 100).toFixed(0)}}%`;
             document.getElementById('detail-explanation').textContent = figure.explanation;
 
