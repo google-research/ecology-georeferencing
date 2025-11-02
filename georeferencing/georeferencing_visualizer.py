@@ -21,7 +21,7 @@ import shutil
 import sys
 
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 from PIL import Image
 
@@ -157,13 +157,15 @@ def prepare_output_folder(output_folder: str,
 
 
 def generate_html(results_data: Dict[str, Any],
-                  image_mapping: Dict[str, str]) -> str:
+                  image_mapping: Dict[str, str],
+                  pdf_base_url: Optional[str] = None) -> str:
     """
     Generate HTML content for the visualization.
 
     Args:
         results_data: Parsed JSON data
         image_mapping: Dict mapping original paths to relative paths
+        pdf_base_url: Optional base URL for PDF files
 
     Returns:
         HTML content as string
@@ -203,9 +205,17 @@ def generate_html(results_data: Dict[str, Any],
                     if not relative_image_path:
                         continue
 
+                    # Determine PDF URL or path
+                    if pdf_base_url:
+                        # Use base URL + filename
+                        pdf_url = pdf_base_url.rstrip('/') + '/' + pdf_filename
+                    else:
+                        # Use original local path
+                        pdf_url = pdf_path
+
                     figure_data = {
                         'pdf_filename': pdf_filename,
-                        'pdf_path': pdf_path,
+                        'pdf_path': pdf_url,
                         'pdf_title': pdf_title,
                         'title_extraction_success': title_extraction_success,
                         'image_filename': img['image_filename'],
@@ -213,7 +223,8 @@ def generate_html(results_data: Dict[str, Any],
                         'page': img['page'],
                         'confidence': georef['confidence'],
                         'explanation': georef['explanation'],
-                        'coordinates': coords
+                        'coordinates': coords,
+                        'text_context': img.get('text_context', {})
                     }
                     figures_data.append(figure_data)
                 else:
@@ -238,14 +249,31 @@ def generate_html(results_data: Dict[str, Any],
     # ...for each PDF file
 
     # Convert to JSON for embedding
-    figures_json = json.dumps(figures_data, indent=2)
-    failed_json = json.dumps(failed_figures, indent=2)
+    # Use separators to avoid extra whitespace and ensure compact JSON
+    figures_json = json.dumps(figures_data, indent=2, separators=(',', ': '))
+    failed_json = json.dumps(failed_figures, indent=2, separators=(',', ': '))
+
+    # Load prompts for chat functionality
+    prompts_path = Path(__file__).parent / "prompts.json"
+    try:
+        with open(prompts_path, 'r') as f:
+            prompts = json.load(f)
+        prompts_json = json.dumps(prompts, indent=2, separators=(',', ': '))
+    except Exception as e:
+        print(f"  Warning: Could not load prompts.json: {e}")
+        prompts_json = json.dumps({
+            "suggest_question": "",
+            "chat": ""
+        }, separators=(',', ': '))
 
     # Generate HTML from template
-    html = VISUALIZATION_HTML.format(
-        figures_json=figures_json,
-        failed_json=failed_json
-    )
+    # Use a custom formatter to avoid issues with { } in JSON
+    html = VISUALIZATION_HTML.replace('{figures_json}', figures_json)
+    html = html.replace('{failed_json}', failed_json)
+    html = html.replace('{prompts_json}', prompts_json)
+
+    # Convert {{ and }} to single braces (they were escaped for .format())
+    html = html.replace('{{', '{').replace('}}', '}')
 
     return html
 
@@ -375,6 +403,10 @@ Examples:
         default=0,
         help='Random seed for sampling (default: 0)'
     )
+    parser.add_argument(
+        '--pdf-base-url',
+        help='Base URL for PDF files (e.g., https://example.com/papers/). If provided, PDF links will use this URL + filename instead of local paths.'
+    )
 
     # Show help if no arguments provided
     if len(sys.argv) == 1:
@@ -422,7 +454,7 @@ Examples:
 
         # Generate HTML
         print("Generating HTML...")
-        html_content = generate_html(results_data, image_mapping)
+        html_content = generate_html(results_data, image_mapping, args.pdf_base_url)
 
         # Write HTML file
         output_html = Path(args.output_folder) / "index.html"

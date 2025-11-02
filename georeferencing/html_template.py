@@ -23,6 +23,18 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
             crossorigin=""></script>
 
+    <!-- Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+
+    <!-- Google Generative AI SDK -->
+    <script type="importmap">
+    {{
+        "imports": {{
+            "@google/generative-ai": "https://esm.run/@google/generative-ai"
+        }}
+    }}
+    </script>
+
     <style>
         * {{
             margin: 0;
@@ -57,16 +69,30 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
         }}
 
         #right-sidebar {{
-            width: 350px;
+            width: 450px;
             background-color: #f8f9fa;
             border-left: 1px solid #dee2e6;
             overflow-y: auto;
-            padding: 20px;
             display: none;
+            flex-direction: column;
         }}
 
         #right-sidebar.visible {{
-            display: block;
+            display: flex;
+        }}
+
+        #sidebar-content {{
+            padding: 20px;
+            flex-shrink: 0;
+        }}
+
+        #chat-container {{
+            border-top: 2px solid #dee2e6;
+            background-color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            min-height: 0;
         }}
 
         .sidebar-header {{
@@ -239,6 +265,174 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
             background-color: white;
             color: #343a40;
         }}
+
+        /* Chat interface styles */
+        .api-key-section {{
+            padding: 12px;
+            background-color: #fff3cd;
+            border-bottom: 1px solid #dee2e6;
+        }}
+
+        .api-key-section label {{
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: #856404;
+        }}
+
+        .api-key-section input {{
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #ffc107;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: monospace;
+        }}
+
+        .api-key-section small {{
+            display: block;
+            margin-top: 4px;
+            font-size: 11px;
+            color: #856404;
+        }}
+
+        #chat-messages {{
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }}
+
+        .chat-message {{
+            padding: 10px 12px;
+            border-radius: 8px;
+            max-width: 100%;
+            word-wrap: break-word;
+        }}
+
+        .chat-message.user {{
+            background-color: #007bff;
+            color: white;
+            align-self: flex-end;
+            margin-left: 20%;
+        }}
+
+        .chat-message.assistant {{
+            background-color: #e9ecef;
+            color: #212529;
+            align-self: flex-start;
+            margin-right: 20%;
+        }}
+
+        .chat-message.error {{
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }}
+
+        .chat-message.loading {{
+            background-color: #e9ecef;
+            color: #6c757d;
+            font-style: italic;
+        }}
+
+        .chat-message p {{
+            margin: 0 0 8px 0;
+        }}
+
+        .chat-message p:last-child {{
+            margin-bottom: 0;
+        }}
+
+        .chat-message ul {{
+            margin: 8px 0;
+            padding-left: 20px;
+        }}
+
+        .chat-message li {{
+            margin: 4px 0;
+        }}
+
+        .chat-message strong {{
+            font-weight: 600;
+        }}
+
+        .chat-message em {{
+            font-style: italic;
+        }}
+
+        #chat-input-container {{
+            padding: 12px;
+            border-top: 1px solid #dee2e6;
+            background-color: #f8f9fa;
+        }}
+
+        #chat-input {{
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            resize: vertical;
+            min-height: 60px;
+        }}
+
+        #chat-input:focus {{
+            outline: none;
+            border-color: #007bff;
+        }}
+
+        .chat-buttons {{
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }}
+
+        .chat-button {{
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }}
+
+        .chat-button.primary {{
+            background-color: #007bff;
+            color: white;
+        }}
+
+        .chat-button.primary:hover:not(:disabled) {{
+            background-color: #0056b3;
+        }}
+
+        .chat-button.secondary {{
+            background-color: #6c757d;
+            color: white;
+        }}
+
+        .chat-button.secondary:hover:not(:disabled) {{
+            background-color: #545b62;
+        }}
+
+        .chat-button:disabled {{
+            opacity: 0.5;
+            cursor: not-allowed;
+        }}
+
+        .chat-header {{
+            padding: 12px 15px;
+            background-color: #343a40;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            border-bottom: 1px solid #dee2e6;
+        }}
     </style>
 </head>
 <body>
@@ -266,30 +460,52 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
     </div>
 
     <div id="right-sidebar">
-        <div class="detail-section">
-            <h3>Paper</h3>
-            <p id="detail-paper-title"></p>
-            <p><a id="detail-pdf-link" href="#" target="_blank">Open PDF</a></p>
+        <div id="sidebar-content">
+            <div class="detail-section">
+                <h3>Paper</h3>
+                <p id="detail-paper-title"></p>
+                <p><a id="detail-pdf-link" href="#" target="_blank">Open PDF</a></p>
+            </div>
+
+            <div class="detail-section">
+                <h3>Figure</h3>
+                <img id="detail-image" class="detail-image" src="" alt="Map figure">
+                <p style="margin-top: 8px; font-size: 12px;" id="detail-page"></p>
+            </div>
+
+            <div class="detail-section">
+                <h3>Georeferencing</h3>
+                <p><strong>Confidence:</strong> <span id="detail-confidence" class="confidence-badge"></span></p>
+                <p style="margin-top: 8px;"><strong>Explanation:</strong></p>
+                <p id="detail-explanation"></p>
+            </div>
         </div>
 
-        <div class="detail-section">
-            <h3>Figure</h3>
-            <img id="detail-image" class="detail-image" src="" alt="Map figure">
-            <p style="margin-top: 8px; font-size: 12px;" id="detail-page"></p>
-        </div>
-
-        <div class="detail-section">
-            <h3>Georeferencing</h3>
-            <p><strong>Confidence:</strong> <span id="detail-confidence" class="confidence-badge"></span></p>
-            <p style="margin-top: 8px;"><strong>Explanation:</strong></p>
-            <p id="detail-explanation"></p>
+        <div id="chat-container">
+            <div class="chat-header">Ask Questions About This Paper</div>
+            <div class="api-key-section">
+                <label for="api-key-input">Gemini API Key:</label>
+                <input type="password" id="api-key-input" placeholder="Enter your Gemini API key">
+                <small>Your key is stored locally in your browser and never sent to our servers.</small>
+            </div>
+            <div id="chat-messages"></div>
+            <div id="chat-input-container">
+                <textarea id="chat-input" placeholder="Ask a question about this map or paper..."></textarea>
+                <div class="chat-buttons">
+                    <button id="suggest-question-btn" class="chat-button secondary">Suggest a Question</button>
+                    <button id="send-question-btn" class="chat-button primary">Send</button>
+                </div>
+            </div>
         </div>
     </div>
 
-    <script>
+    <script type="module">
+        import {{ GoogleGenerativeAI }} from "@google/generative-ai";
+
         // Data from Python
         const figuresData = {figures_json};
         const failedData = {failed_json};
+        const prompts = {prompts_json};
 
         // State
         let currentIndex = -1;
@@ -447,6 +663,245 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
             }}
         }}
 
+        // ===== CHAT FUNCTIONALITY =====
+
+        // API key management (localStorage)
+        const API_KEY_STORAGE_KEY = 'gemini_api_key';
+
+        function getApiKey() {{
+            return localStorage.getItem(API_KEY_STORAGE_KEY) || '';
+        }}
+
+        function saveApiKey(key) {{
+            localStorage.setItem(API_KEY_STORAGE_KEY, key);
+        }}
+
+        // Simple markdown renderer (basic support for bold, italic, lists)
+        function renderMarkdown(text) {{
+            // Convert **bold** to <strong>
+            text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            // Convert *italic* to <em>
+            text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            // Convert bullet lists (lines starting with - or *)
+            const lines = text.split('\n');
+            let inList = false;
+            let result = [];
+
+            for (let i = 0; i < lines.length; i++) {{
+                const line = lines[i];
+                const bulletMatch = line.match(/^[\s]*[-\*]\s+(.+)$/);
+
+                if (bulletMatch) {{
+                    if (!inList) {{
+                        result.push('<ul>');
+                        inList = true;
+                    }}
+                    result.push(`<li>${{bulletMatch[1]}}</li>`);
+                }} else {{
+                    if (inList) {{
+                        result.push('</ul>');
+                        inList = false;
+                    }}
+                    if (line.trim()) {{
+                        result.push(`<p>${{line}}</p>`);
+                    }}
+                }}
+            }}
+
+            if (inList) {{
+                result.push('</ul>');
+            }}
+
+            return result.join('');
+        }}
+
+        // Add message to chat
+        function addChatMessage(text, type = 'assistant', isLoading = false) {{
+            const chatMessages = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${{type}} ${{isLoading ? 'loading' : ''}}`;
+
+            if (type === 'assistant' && !isLoading) {{
+                // Render markdown for assistant messages
+                messageDiv.innerHTML = renderMarkdown(text);
+            }} else {{
+                messageDiv.textContent = text;
+            }}
+
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            return messageDiv;
+        }}
+
+        // Format text context for prompt
+        function formatTextContext(textContext) {{
+            const parts = [];
+
+            if (textContext.first_page) {{
+                parts.push(`TEXT FROM FIRST PAGE:\\n${{textContext.first_page}}`);
+            }}
+            if (textContext.page_before && textContext.page_before !== "[Same as first_page]") {{
+                parts.push(`\\nTEXT FROM PAGE BEFORE IMAGE:\\n${{textContext.page_before}}`);
+            }}
+            if (textContext.image_page && textContext.image_page !== "[Same as first_page]") {{
+                parts.push(`\\nTEXT FROM IMAGE PAGE:\\n${{textContext.image_page}}`);
+            }}
+            if (textContext.page_after) {{
+                parts.push(`\\nTEXT FROM PAGE AFTER IMAGE:\\n${{textContext.page_after}}`);
+            }}
+
+            return parts.join('');
+        }}
+
+        // Send question to Gemini
+        async function sendQuestion(question, issuggestion = false) {{
+            const apiKey = getApiKey();
+
+            if (!apiKey) {{
+                addChatMessage('Please enter your Gemini API key above.', 'error');
+                return;
+            }}
+
+            if (currentIndex < 0) {{
+                addChatMessage('Please select a figure first.', 'error');
+                return;
+            }}
+
+            const figure = figuresData[currentIndex];
+
+            // Add user message (only if not a suggestion)
+            if (!issuggestion) {{
+                addChatMessage(question, 'user');
+            }}
+
+            // Add loading message
+            const loadingMsg = addChatMessage('Thinking...', 'assistant', true);
+
+            // Disable buttons
+            document.getElementById('send-question-btn').disabled = true;
+            document.getElementById('suggest-question-btn').disabled = true;
+
+            try {{
+                const genAI = new GoogleGenerativeAI(apiKey);
+                const model = genAI.getGenerativeModel({{ model: "gemini-2.0-flash-exp" }});
+
+                // Build prompt with map image and context
+                const imagePath = figure.image_path;
+
+                // Fetch image and convert to base64
+                const imageResponse = await fetch(imagePath);
+                const imageBlob = await imageResponse.blob();
+                const imageBase64 = await new Promise((resolve) => {{
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                    reader.readAsDataURL(imageBlob);
+                }});
+
+                // Format the context
+                const textContext = formatTextContext(figure.text_context || {{}});
+                const coordsText = `Geographic coordinates:\\n- Upper-left: ${{figure.coordinates.upper_left.lat}}, ${{figure.coordinates.upper_left.lon}}\\n- Upper-right: ${{figure.coordinates.upper_right.lat}}, ${{figure.coordinates.upper_right.lon}}\\n- Lower-left: ${{figure.coordinates.lower_left.lat}}, ${{figure.coordinates.lower_left.lon}}\\n- Lower-right: ${{figure.coordinates.lower_right.lat}}, ${{figure.coordinates.lower_right.lon}}`;
+
+                const fullPrompt = `${{prompts.chat}}\\n\\nPDF Link: ${{figure.pdf_path}}\\n\\n${{coordsText}}\\n\\n${{textContext}}\\n\\nUser question: ${{question}}`;
+
+                const result = await model.generateContent([
+                    {{
+                        inlineData: {{
+                            mimeType: 'image/jpeg',
+                            data: imageBase64
+                        }}
+                    }},
+                    {{ text: fullPrompt }}
+                ]);
+
+                const response = await result.response;
+                const responseText = response.text();
+
+                // Remove loading message and add response
+                loadingMsg.remove();
+                addChatMessage(responseText, 'assistant');
+            }} catch (error) {{
+                console.error('Error:', error);
+                loadingMsg.remove();
+                addChatMessage(`Error: ${{error.message}}`, 'error');
+            }} finally {{
+                // Re-enable buttons
+                document.getElementById('send-question-btn').disabled = false;
+                document.getElementById('suggest-question-btn').disabled = false;
+            }}
+        }}
+
+        // Suggest a good question
+        async function suggestQuestion() {{
+            const apiKey = getApiKey();
+
+            if (!apiKey) {{
+                addChatMessage('Please enter your Gemini API key above.', 'error');
+                return;
+            }}
+
+            if (currentIndex < 0) {{
+                addChatMessage('Please select a figure first.', 'error');
+                return;
+            }}
+
+            const figure = figuresData[currentIndex];
+
+            // Add loading message
+            const loadingMsg = addChatMessage('Generating a question...', 'assistant', true);
+
+            // Disable buttons
+            document.getElementById('send-question-btn').disabled = true;
+            document.getElementById('suggest-question-btn').disabled = true;
+
+            try {{
+                const genAI = new GoogleGenerativeAI(apiKey);
+                const model = genAI.getGenerativeModel({{ model: "gemini-2.0-flash-exp" }});
+
+                // Fetch image and convert to base64
+                const imagePath = figure.image_path;
+                const imageResponse = await fetch(imagePath);
+                const imageBlob = await imageResponse.blob();
+                const imageBase64 = await new Promise((resolve) => {{
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                    reader.readAsDataURL(imageBlob);
+                }});
+
+                // Format the context
+                const textContext = formatTextContext(figure.text_context || {{}});
+                const coordsText = `Geographic coordinates:\\n- Upper-left: ${{figure.coordinates.upper_left.lat}}, ${{figure.coordinates.upper_left.lon}}\\n- Upper-right: ${{figure.coordinates.upper_right.lat}}, ${{figure.coordinates.upper_right.lon}}\\n- Lower-left: ${{figure.coordinates.lower_left.lat}}, ${{figure.coordinates.lower_left.lon}}\\n- Lower-right: ${{figure.coordinates.lower_right.lat}}, ${{figure.coordinates.lower_right.lon}}`;
+
+                const fullPrompt = `${{prompts.suggest_question}}\\n\\nPDF Link: ${{figure.pdf_path}}\\n\\n${{coordsText}}\\n\\n${{textContext}}`;
+
+                const result = await model.generateContent([
+                    {{
+                        inlineData: {{
+                            mimeType: 'image/jpeg',
+                            data: imageBase64
+                        }}
+                    }},
+                    {{ text: fullPrompt }}
+                ]);
+
+                const response = await result.response;
+                const suggestedQuestion = response.text().trim();
+
+                // Remove loading message
+                loadingMsg.remove();
+
+                // Populate input and send automatically
+                document.getElementById('chat-input').value = suggestedQuestion;
+                await sendQuestion(suggestedQuestion, true);
+            }} catch (error) {{
+                console.error('Error:', error);
+                loadingMsg.remove();
+                addChatMessage(`Error: ${{error.message}}`, 'error');
+                document.getElementById('send-question-btn').disabled = false;
+                document.getElementById('suggest-question-btn').disabled = false;
+            }}
+        }}
+
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {{
             initMap();
@@ -467,6 +922,42 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
             // Setup navigation buttons
             document.getElementById('prev-button').onclick = goToPrevious;
             document.getElementById('next-button').onclick = goToNext;
+
+            // Setup chat functionality
+            // Load saved API key
+            const savedKey = getApiKey();
+            if (savedKey) {{
+                document.getElementById('api-key-input').value = savedKey;
+            }}
+
+            // Save API key on change
+            document.getElementById('api-key-input').addEventListener('change', (e) => {{
+                saveApiKey(e.target.value);
+            }});
+
+            // Send question button
+            document.getElementById('send-question-btn').addEventListener('click', () => {{
+                const question = document.getElementById('chat-input').value.trim();
+                if (question) {{
+                    sendQuestion(question);
+                    document.getElementById('chat-input').value = '';
+                }}
+            }});
+
+            // Enter key in textarea
+            document.getElementById('chat-input').addEventListener('keydown', (e) => {{
+                if (e.key === 'Enter' && !e.shiftKey) {{
+                    e.preventDefault();
+                    const question = e.target.value.trim();
+                    if (question) {{
+                        sendQuestion(question);
+                        e.target.value = '';
+                    }}
+                }}
+            }});
+
+            // Suggest question button
+            document.getElementById('suggest-question-btn').addEventListener('click', suggestQuestion);
         }});
     </script>
 </body>

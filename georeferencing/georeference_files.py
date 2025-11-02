@@ -1571,6 +1571,25 @@ Examples:
     print(f"=== Ecology Paper Georeferencing ({mode_str} API) ===\n")
 
     try:
+        # Validate output file path early
+        if not args.resume:
+            output_dir = os.path.dirname(args.output_file)
+            if output_dir and not os.path.exists(output_dir):
+                print(f"❌ Error: Output directory does not exist: {output_dir}")
+                print(f"   Please create the directory or specify a valid path.")
+                sys.exit(1)
+
+            # Confirm that we can write to the output file location
+            try:
+                test_path = args.output_file + '.test'
+                with open(test_path, 'w') as f:
+                    f.write('test')
+                os.remove(test_path)
+            except Exception as e:
+                print(f"❌ Error: Cannot write to output file location: {args.output_file}")
+                print(f"   {str(e)}")
+                sys.exit(1)
+
         # Load API key
         print("Loading API key...")
         api_key = load_api_key()
@@ -1898,6 +1917,10 @@ Examples:
                     'page': img['page'],
                     'dimensions': {'width': img['width'], 'height': img['height']}
                 }
+
+                # Add text context if available
+                if 'text_context' in img:
+                    img_output['text_context'] = img['text_context']
 
                 # Add map identification results
                 if img_path in map_id_results:

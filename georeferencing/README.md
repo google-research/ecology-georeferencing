@@ -368,6 +368,13 @@ Images are automatically resized to `--max-image-size` (default 800px) to reduce
 * Support local LLMs via Ollama
 * Add validation against ground truth, when run on the benchmark dataset
 
+### Chat interface improvements
+
+* Add support for multi-turn conversation history (currently each question is independent)
+* Pre-generate suggested questions during the visualization step (currently generated on-demand)
+* Include full PDF content instead of just text context for better question answering
+* Add server-side API key management to avoid requiring users to enter their own key (currently keys are stored in browser localStorage)
+
 ## Contributing
 
 This is part of the [ecology georeferencing benchmark dataset project](https://github.com/google-research/ecology-georeferencing). For issues and contributions, see the main repository README.
