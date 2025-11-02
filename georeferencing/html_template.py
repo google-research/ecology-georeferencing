@@ -83,16 +83,41 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
 
         #sidebar-content {{
             padding: 20px;
+            overflow-y: auto;
             flex-shrink: 0;
         }}
 
+        #resize-handle {{
+            height: 8px;
+            background-color: #dee2e6;
+            cursor: ns-resize;
+            position: relative;
+            flex-shrink: 0;
+        }}
+
+        #resize-handle:hover {{
+            background-color: #007bff;
+        }}
+
+        #resize-handle::before {{
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 4px;
+            background-color: #6c757d;
+            border-radius: 2px;
+        }}
+
         #chat-container {{
-            border-top: 2px solid #dee2e6;
             background-color: #ffffff;
             display: flex;
             flex-direction: column;
             flex-grow: 1;
-            min-height: 0;
+            min-height: 200px;
+            overflow: hidden;
         }}
 
         .sidebar-header {{
@@ -269,7 +294,7 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
         /* Chat interface styles */
         .api-key-section {{
             padding: 12px;
-            background-color: #fff3cd;
+            background-color: #f8f9fa;
             border-bottom: 1px solid #dee2e6;
         }}
 
@@ -278,13 +303,13 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
             font-size: 12px;
             font-weight: 600;
             margin-bottom: 4px;
-            color: #856404;
+            color: #495057;
         }}
 
         .api-key-section input {{
             width: 100%;
             padding: 6px 8px;
-            border: 1px solid #ffc107;
+            border: 1px solid #ced4da;
             border-radius: 4px;
             font-size: 12px;
             font-family: monospace;
@@ -294,7 +319,7 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
             display: block;
             margin-top: 4px;
             font-size: 11px;
-            color: #856404;
+            color: #6c757d;
         }}
 
         #chat-messages {{
@@ -378,7 +403,7 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
             font-size: 14px;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             resize: vertical;
-            min-height: 60px;
+            min-height: 90px;
         }}
 
         #chat-input:focus {{
@@ -480,6 +505,8 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
                 <p id="detail-explanation"></p>
             </div>
         </div>
+
+        <div id="resize-handle"></div>
 
         <div id="chat-container">
             <div class="chat-header">Ask Questions About This Paper</div>
@@ -683,7 +710,7 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
             // Convert *italic* to <em>
             text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
             // Convert bullet lists (lines starting with - or *)
-            const lines = text.split('\n');
+            const lines = text.split('\\n');
             let inList = false;
             let result = [];
 
@@ -890,9 +917,12 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
                 // Remove loading message
                 loadingMsg.remove();
 
-                // Populate input and send automatically
+                // Populate input (user will click Send to submit)
                 document.getElementById('chat-input').value = suggestedQuestion;
-                await sendQuestion(suggestedQuestion, true);
+
+                // Re-enable buttons
+                document.getElementById('send-question-btn').disabled = false;
+                document.getElementById('suggest-question-btn').disabled = false;
             }} catch (error) {{
                 console.error('Error:', error);
                 loadingMsg.remove();
@@ -958,6 +988,65 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
 
             // Suggest question button
             document.getElementById('suggest-question-btn').addEventListener('click', suggestQuestion);
+
+            // Setup resize functionality
+            const resizeHandle = document.getElementById('resize-handle');
+            const sidebarContent = document.getElementById('sidebar-content');
+            const chatContainer = document.getElementById('chat-container');
+            const rightSidebar = document.getElementById('right-sidebar');
+
+            let isResizing = false;
+            let startY = 0;
+            let startContentHeight = 0;
+            let startChatHeight = 0;
+
+            resizeHandle.addEventListener('mousedown', (e) => {{
+                isResizing = true;
+                startY = e.clientY;
+                startContentHeight = sidebarContent.offsetHeight;
+                startChatHeight = chatContainer.offsetHeight;
+                document.body.style.cursor = 'ns-resize';
+                document.body.style.userSelect = 'none';
+                e.preventDefault();
+            }});
+
+            document.addEventListener('mousemove', (e) => {{
+                if (!isResizing) return;
+
+                const deltaY = e.clientY - startY;
+                const sidebarHeight = rightSidebar.offsetHeight;
+                const handleHeight = resizeHandle.offsetHeight;
+
+                // Calculate new heights
+                let newContentHeight = startContentHeight + deltaY;
+                let newChatHeight = startChatHeight - deltaY;
+
+                // Enforce minimum heights
+                const minContentHeight = 200;
+                const minChatHeight = 200;
+
+                if (newContentHeight < minContentHeight) {{
+                    newContentHeight = minContentHeight;
+                    newChatHeight = sidebarHeight - minContentHeight - handleHeight;
+                }} else if (newChatHeight < minChatHeight) {{
+                    newChatHeight = minChatHeight;
+                    newContentHeight = sidebarHeight - minChatHeight - handleHeight;
+                }}
+
+                // Apply new heights
+                sidebarContent.style.height = newContentHeight + 'px';
+                sidebarContent.style.flexShrink = '0';
+                chatContainer.style.flexGrow = '0';
+                chatContainer.style.height = newChatHeight + 'px';
+            }});
+
+            document.addEventListener('mouseup', () => {{
+                if (isResizing) {{
+                    isResizing = false;
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                }}
+            }});
         }});
     </script>
 </body>

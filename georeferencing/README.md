@@ -288,7 +288,13 @@ This creates a self-contained visualization in the `viz/` folder with:
 - `index.html` - Interactive map visualization
 - `images/` - Resized copies of georeferenced map images
 
-Open `viz/index.html` in any web browser to view the results.
+The generated HTML must be served via HTTP, not opened directly with `file://`. The chat interface uses ES6 modules and fetch API that are blocked by browser security when using the file protocol. Start a local HTTP server:
+
+```bash
+cd viz
+python3 -m http.server 8000
+# Then open http://localhost:8000/index.html in your browser
+```
 
 ### Command-line options
 

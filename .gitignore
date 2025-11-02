@@ -10,6 +10,7 @@ agents.md
 **/*settings.json
 **/*settings.local.json
 GEMINI_API_KEY.txt
+.playwright-mcp
 
 ################
 ### Python ###
