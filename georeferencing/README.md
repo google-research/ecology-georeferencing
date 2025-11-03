@@ -1,6 +1,6 @@
 # Georeferencing Tools
 
-This folder contains a demonstration implementation of map georeferencing in ecology research papers using multimodal LLMs.  Sample output from this library, for 15 randomly-selected papers from our benchmark dataset, is available [here](https://dmorris.net/misc/georeferencing/benchmark-visualization_20251009_15/).
+This folder contains a demonstration implementation of map georeferencing in ecology research papers using multimodal LLMs.  Sample output from this library, for 15 randomly-selected papers from our benchmark dataset, is available [here](https://dmorris.net/misc/georeferencing/georeferencing_visualization_20251102_00_15_0/).
 
 ## Table of Contents
 
