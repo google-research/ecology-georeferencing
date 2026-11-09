@@ -699,6 +699,15 @@ VISUALIZATION_HTML = """<!DOCTYPE html>
 
         // Simple markdown renderer (basic support for bold, italic, lists)
         function renderMarkdown(text) {{
+           // Escape HTML special characters in the (LLM-supplied) input before
+           // doing any markup substitution, so that raw HTML in the model
+           // response is rendered as text rather than parsed by the browser.
+           text = String(text)
+               .replace(/&/g, '&amp;')
+               .replace(/</g, '&lt;')
+               .replace(/>/g, '&gt;')
+               .replace(/"/g, '&quot;')
+               .replace(/'/g, '&#39;');
             // Convert **bold** to <strong>
             text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
             // Convert *italic* to <em>
